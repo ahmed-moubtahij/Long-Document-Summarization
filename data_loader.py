@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterator, List, Union
 import docx
 from simplify_docx import simplify
-from itertools import chain
+from itertools import chain, zip_longest
 
 # TODO: write the DataLoader class then import it in data_analysis.ipynb
 
@@ -37,28 +37,29 @@ def get_args() -> argparse.Namespace:
 
 class DataLoader:
 
-    def __init__(self, data_path: Path, start_idx=155, n_chapters=5) -> None:
+    def __init__(self, data_path: Path, intro_idx=152, n_chapters=5) -> None:
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
         self.paragraphs: Iterator[Union[str, List[dict]]] = self._init_paragraphs()
 
-        self.start_idx = start_idx
+        self.intro_idx = intro_idx
         self.n_chapters = n_chapters
         self.chapters = self._init_chapters()
 
     def _init_chapters(self, marker="Chapitre {} /"):
         _paragraphs: List[Union[str, List[dict]]] = list(self.paragraphs)
-        chapters: Union[str, List[dict]] = []
+        chapters: Union[str, List[dict]]
 
-        start, end = 0, self.start_idx
-        bound = lambda i: _paragraphs.index(marker.format(i), self.start_idx)
-        for chapter_idx in range(1, self.n_chapters + 1):
-            chapters.append(_paragraphs[start: end])
-            start = bound(chapter_idx)
-            end = bound(chapter_idx + 1) if chapter_idx < self.n_chapters else None
-        chapters.append(_paragraphs[start:])
+        bound = lambda chap: _paragraphs.index(marker.format(chap), self.intro_idx)\
+                             if chap else None
+        chaps_from = lambda i: range(i, self.n_chapters + 1)
 
-        # TODO: Look into concatenating each chapter
+        chapters = [_paragraphs[bound(chap_start): bound(chap_end)]
+                    for chap_start, chap_end
+                    in zip_longest(chaps_from(0), chaps_from(1))]
+
+        # TODO: Look into concatenating each chapter, but first,
+        # look the input format expected for the stats you want
 
         return chapters
 
