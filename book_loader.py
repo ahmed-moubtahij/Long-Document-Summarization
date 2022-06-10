@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Iterator, List, Union, Dict
 import re
-from itertools import chain, groupby
+from itertools import chain, groupby, islice
 import docx
 from simplify_docx import simplify
 
@@ -33,49 +33,50 @@ def get_args() -> argparse.Namespace:
     return arg_parser.parse_args()
 
 
-class BookLoader: # pylint: disable=too-few-public-methods
+class BookLoader:
 
-    def __init__(self, data_path: Path, intro_idx=152,
-                 n_chapters=5, re_separator=r"Chapitre (\d+) /"):
+    def __init__(self, data_path: Path, re_separator=r"^Chapitre (\d+) /$",
+                 after_tables_of_contents=152):
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
-        self.paragraphs: Iterator[Union[str, List[dict]]] = self._init_paragraphs()
-
-        self.intro_idx = intro_idx
-        self.n_chapters = n_chapters
+        self.after_tables_of_contents = after_tables_of_contents
+        self.paragraphs = self._init_paragraphs()
         self.re_separator = re_separator
         self.chapters = self._init_chapters()
 
-    class ChapterIndexer: # pylint: disable=too-few-public-methods
-        def __init__(self, re_separator: str):
-            self.separator_pattern: re.Pattern = re.compile(re_separator)
-            self.current_chapter = 0
+    def _chapter_indexer(self):
+        separator_pattern: re.Pattern = re.compile(self.re_separator)
+        current_chapter = 0
 
-        def __call__(self, paragraph: Union[str, List[dict]]):
+        def indexer(paragraph: Union[str, List[dict]]):
+            nonlocal current_chapter
             if isinstance(paragraph, str):
-                if found_chapter := self.separator_pattern.search(paragraph):
-                    self.current_chapter = found_chapter.group(1)
+                if found_chapter := separator_pattern.search(paragraph):
+                    current_chapter = int(found_chapter.group(1))
+            return current_chapter
 
-            return self.current_chapter
-
+        return indexer
 
     def _init_chapters(self) -> Dict[int, List[Union[str, List[dict]]]]:
-        _chapters = groupby(self.paragraphs,
-                            self.ChapterIndexer(self.re_separator))
-        chapters = {int(idx): list(paragraphs) for idx, paragraphs in _chapters}
+
+        _chapters = groupby(self.paragraphs, self._chapter_indexer())
+        chapters = {idx: list(paragraphs) for idx, paragraphs in _chapters}
         # TODO: Look into an "aggregate_chapter(paragraphs) -> List[str]", but first,
         # look the input format expected for the stats you want
         return chapters
 
     def _init_paragraphs(self) -> Iterator[Union[str, List[dict]]]:
         _docx: List[dict] = self.docx["VALUE"][0]["VALUE"]
+
         _paragraphs: Iterator[Any]
         _paragraphs = map(lambda p: p["VALUE"], _docx)
         _paragraphs = filter(lambda p: p != "[w:sdt]", _paragraphs)
         _paragraphs = chain.from_iterable(_paragraphs)
         _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
+        _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
+        _paragraphs = islice(_paragraphs, self.after_tables_of_contents, None)
 
-        return map(lambda p: p["VALUE"], _paragraphs)
+        return _paragraphs
 
 
 if __name__ == "__main__":
