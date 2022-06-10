@@ -1,22 +1,20 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import argparse
 from pathlib import Path
-from typing import Iterator, List, Union
+from typing import Any, Iterator, List, Union, Dict
+import re
+from itertools import chain, groupby
 import docx
 from simplify_docx import simplify
-from itertools import chain, zip_longest
 
-# TODO: write the DataLoader class then import it in data_analysis.ipynb
+# TODO: write the BookLoader class then import it in data_analysis.ipynb
 
 def main(args) -> None:
     data_path = make_data_path(args.data_dir, args.data_fn)
 
-    book = DataLoader(data_path)
+    book = BookLoader(data_path)
 
     print(book.chapters)
-
-def by_type(paragraph: List[dict]) -> bool:
-    return any(p['VALUE'] == '[w:drawing]' for p in paragraph)
 
 def make_data_path(data_dir: str, data_fn: str) -> Path:
     data_path = Path(data_dir + data_fn).expanduser().resolve()
@@ -35,37 +33,43 @@ def get_args() -> argparse.Namespace:
     return arg_parser.parse_args()
 
 
-class DataLoader:
+class BookLoader: # pylint: disable=too-few-public-methods
 
-    def __init__(self, data_path: Path, intro_idx=152, n_chapters=5) -> None:
+    def __init__(self, data_path: Path, intro_idx=152,
+                 n_chapters=5, re_separator=r"Chapitre (\d+) /"):
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
         self.paragraphs: Iterator[Union[str, List[dict]]] = self._init_paragraphs()
 
         self.intro_idx = intro_idx
         self.n_chapters = n_chapters
+        self.re_separator = re_separator
         self.chapters = self._init_chapters()
 
-    def _init_chapters(self, marker="Chapitre {} /"):
-        _paragraphs: List[Union[str, List[dict]]] = list(self.paragraphs)
-        chapters: Union[str, List[dict]]
+    class ChapterIndexer: # pylint: disable=too-few-public-methods
+        def __init__(self, re_separator: str):
+            self.separator_pattern: re.Pattern = re.compile(re_separator)
+            self.current_chapter = 0
 
-        bound = lambda chap: _paragraphs.index(marker.format(chap), self.intro_idx)\
-                             if chap else None
-        chaps_from = lambda i: range(i, self.n_chapters + 1)
+        def __call__(self, paragraph: Union[str, List[dict]]):
+            if isinstance(paragraph, str):
+                if found_chapter := self.separator_pattern.search(paragraph):
+                    self.current_chapter = found_chapter.group(1)
 
-        chapters = [_paragraphs[bound(chap_start): bound(chap_end)]
-                    for chap_start, chap_end
-                    in zip_longest(chaps_from(0), chaps_from(1))]
+            return self.current_chapter
 
-        # TODO: Look into concatenating each chapter, but first,
+
+    def _init_chapters(self) -> Dict[int, List[Union[str, List[dict]]]]:
+        _chapters = groupby(self.paragraphs,
+                            self.ChapterIndexer(self.re_separator))
+        chapters = {int(idx): list(paragraphs) for idx, paragraphs in _chapters}
+        # TODO: Look into an "aggregate_chapter(paragraphs) -> List[str]", but first,
         # look the input format expected for the stats you want
-
         return chapters
-
 
     def _init_paragraphs(self) -> Iterator[Union[str, List[dict]]]:
         _docx: List[dict] = self.docx["VALUE"][0]["VALUE"]
+        _paragraphs: Iterator[Any]
         _paragraphs = map(lambda p: p["VALUE"], _docx)
         _paragraphs = filter(lambda p: p != "[w:sdt]", _paragraphs)
         _paragraphs = chain.from_iterable(_paragraphs)
