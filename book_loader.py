@@ -49,10 +49,10 @@ class BookLoader:
         self.title = next(self.paragraphs) if not title else title
         self.intro_marker = intro_marker
         self.chapter_separator = chapter_separator
-        self.header_marker = (header_marker if header_marker
-                              else (re.sub(r"\(|\)", '', self.chapter_separator)
-                                    .removesuffix('$')
-                                    + r".*"))
+        self.header_marker = (re.sub(r"\(|\)", '', self.chapter_separator)
+                              .removesuffix('$') +  r".*"
+                              if not header_marker
+                              else header_marker)
         self.chapters = self._init_chapters()
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
@@ -93,9 +93,14 @@ class BookLoader:
         _paragraphs: Iterator[Any]
         _paragraphs = map(lambda p: p["VALUE"], _docx)
         _paragraphs = filter(lambda p: p != "[w:sdt]", _paragraphs)
+        # https://github.com/microsoft/Simplify-Docx/blob/
+        # ce493b60e3e4308bde7399257426c0c68a6c699b/src/simplify_docx/iterators/body.py#L60
         _paragraphs = chain.from_iterable(_paragraphs)
         _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
         _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
+        _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
+                                    if isinstance(p, str) else p, _paragraphs)
+        # e.g. habi- tuellement, inci- dence => habituellement, incidence
 
         return _paragraphs
 
