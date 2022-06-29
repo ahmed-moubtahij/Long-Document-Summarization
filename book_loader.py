@@ -11,7 +11,7 @@ from simplify_docx import simplify
 def main(args) -> None:
     data_path = make_data_path(args.data_dir, args.data_fn)
     book = BookLoader(data_path)
-    print(book.chapters)
+    print(book.chapters[0])
 
 
 def make_data_path(data_dir: str, data_fn: str) -> Path:
@@ -36,27 +36,24 @@ class BookLoader:
     Table = List[dict]
     TextOrTable = Union[str, Table]
 
-    def __init__(self,
-                 data_path: Path,
-                 title="",
-                 intro_marker=r"^Introduction$",
-                 chapter_separator=r"^Chapitre (\d+) \/$",
-                 header_marker=""):
+    def __init__(self, data_path: Path, title="", **markers):
+
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
-
         self.paragraphs = self._init_paragraphs()
-        self.title = next(self.paragraphs) if not title else title
-        self.intro_marker = intro_marker
-        self.chapter_separator = chapter_separator
-        self.header_marker = (re.sub(r"\(|\)", '', self.chapter_separator)
-                              .removesuffix('$') +  r".*"
-                              if not header_marker
-                              else header_marker)
+        self.title = title if title else next(self.paragraphs)
+        self.intro_marker = markers.get("intro_marker", r"^Introduction$")
+        self.chapter_marker = markers.get("chapter_marker", r"^Chapitre (\d+) \/$")
+        self.header_marker = markers.get("header_marker",
+                                         re.sub(r"\(|\)", '', self.chapter_marker)
+                                         .removesuffix('$') +  r".*")
         self.chapters = self._init_chapters()
+        # TODO: Have a property getter for self.chapters.
+        # This could help with pylint's `too-few-public-methods`
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
-        separator_pattern = re.compile(self.chapter_separator)
+
+        separator_pattern = re.compile(self.chapter_marker)
         current_chapter = 0
 
         def indexer(paragraph: Union[str, List[dict]]) -> int:
@@ -69,6 +66,7 @@ class BookLoader:
         return indexer
 
     def _strip_headers(self, paragraphs: Iterator[TextOrTable]) -> Iterator[TextOrTable]:
+
         return (p for p in paragraphs
                 if not isinstance(p, str) # not str => Table => not a header
                 or (p != self.title
@@ -77,6 +75,7 @@ class BookLoader:
 
 
     def _init_chapters(self) -> Dict[int, List[TextOrTable]]:
+
         paragraphs_from_intro = dropwhile(
             lambda p: (not isinstance(p, str)
                        or not re.match(self.intro_marker, p)),
@@ -88,6 +87,7 @@ class BookLoader:
         return chapters
 
     def _init_paragraphs(self) -> Iterator[TextOrTable]:
+
         _docx: List[dict] = self.docx["VALUE"][0]["VALUE"]
 
         _paragraphs: Iterator[Any]
@@ -107,4 +107,5 @@ class BookLoader:
 
 
 if __name__ == "__main__":
+
     main(get_args())
