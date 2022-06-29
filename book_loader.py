@@ -99,7 +99,8 @@ class BookLoader:
         _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
         _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
         _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-                                    if isinstance(p, str) else p, _paragraphs)
+                                    if isinstance(p, str) else p,
+                                    _paragraphs)
         # e.g. habi- tuellement, inci- dence => habituellement, incidence
 
         return _paragraphs
