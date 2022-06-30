@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import argparse
 from pathlib import Path
-from typing import Any, Iterator, List, Union, Dict, Callable
+from typing import Any, Iterator, List, Union, Dict, Callable, Literal, TypeAlias
 import re
 from itertools import chain, dropwhile, groupby
 import docx
@@ -32,21 +32,21 @@ def get_args() -> argparse.Namespace:
 
 class BookLoader:
 
-    # pylint: disable=E0602 # undefined-variable
-    Table = List[dict]
-    TextOrTable = Union[str, Table]
+    Table: TypeAlias = List[dict]
+    TextOrTable: TypeAlias = Union[str, Table]
+    Marker: TypeAlias = Literal["intro", "chapter", "header"]
 
-    def __init__(self, data_path: Path, title="", **markers):
+    def __init__(self, data_path: Path, title="",
+                 markers: Dict[Marker, str] = {}):
 
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
         self.paragraphs = self._init_paragraphs()
         self.title = title if title else next(self.paragraphs)
-        self.intro_marker = markers.get("intro_marker", r"^Introduction$")
-        self.chapter_marker = markers.get("chapter_marker", r"^Chapitre (\d+) \/$")
-        self.header_marker = markers.get("header_marker",
-                                         re.sub(r"\(|\)", '', self.chapter_marker)
-                                         .removesuffix('$') +  r".*")
+        self.intro_marker = markers.get("intro", r"^Introduction$")
+        self.chapter_marker = markers.get("chapter", r"^Chapitre (\d+) \/$")
+        self.header_marker = markers.get("header",
+            re.sub(r"\(|\)", '', self.chapter_marker).removesuffix('$') +  r".*")
         self.chapters = self._init_chapters()
         # TODO: Have a property getter for self.chapters.
         # This could help with pylint's `too-few-public-methods`
@@ -98,8 +98,8 @@ class BookLoader:
         _paragraphs = chain.from_iterable(_paragraphs)
         _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
         _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
-        _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-                                    if isinstance(p, str) else p,
+        _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)\
+                                    if isinstance(p, str) else p,\
                                     _paragraphs)
         # e.g. habi- tuellement, inci- dence => habituellement, incidence
 
