@@ -1,4 +1,4 @@
 .ipynb_checkpoints/
 .vscode/
 .mypy_cache/
-__pycached__/
+__pycache__/
