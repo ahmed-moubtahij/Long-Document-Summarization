@@ -30,37 +30,47 @@ def get_args() -> argparse.Namespace:
                             help=("File name with the text to summarize"))
     return arg_parser.parse_args()
 
+
+# pylint: disable=no-member # `setattr` dynamic members are opaque to type checkers
 class BookLoader:
+# TODO: --too-few-public-methods. As a data loader, Should this be a dataclass? Look into their usecases
 
     Table: TypeAlias = List[dict]
     TextOrTable: TypeAlias = Union[str, Table]
-    Marker: TypeAlias = Literal["intro", "chapter", "header"]
+    Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
+
+    default_markers: Dict[Marker, re.Pattern[str]] = {
+        "intro_marker": re.compile(r"^Introduction$"),
+        "chapter_marker": re.compile(r"^Chapitre (\d+) \/$"),
+        "header_marker": re.compile(r"^Chapitre \d+ \/.*")
+    }
 
     def __init__(self, data_path: Path, title="",
-                 markers: Dict[Marker, str] = {}):
+                 markers: Dict[Marker, re.Pattern[str]] | None=None):
 
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
         self.paragraphs = self._init_paragraphs()
         self.title = title if title else next(self.paragraphs)
-        self.intro_marker = markers.get("intro", r"^Introduction$")
-        self.chapter_marker = markers.get("chapter", r"^Chapitre (\d+) \/$")
-        self.header_marker = markers.get("header",
-            re.sub(r"\(|\)", '', self.chapter_marker).removesuffix('$') +  r".*")
+
+        if markers is None:
+            markers = {}
+        for marker, default_pattern in BookLoader.default_markers.items():
+            setattr(self, marker, markers.get(marker, default_pattern))
+
         self.chapters = self._init_chapters()
         # TODO: Have a property getter for self.chapters.
         # This could help with pylint's `too-few-public-methods`
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
-        separator_pattern = re.compile(self.chapter_marker)
         current_chapter = 0
-
         def indexer(paragraph: Union[str, List[dict]]) -> int:
             nonlocal current_chapter
             if isinstance(paragraph, str):
-                if found_chapter := separator_pattern.search(paragraph):
+                if found_chapter := self.chapter_marker.search(paragraph):
                     current_chapter = int(found_chapter.group(1))
+
             return current_chapter
 
         return indexer
@@ -70,15 +80,13 @@ class BookLoader:
         return (p for p in paragraphs
                 if not isinstance(p, str) # not str => Table => not a header
                 or (p != self.title
-                    and not re.match(self.intro_marker, p)
-                    and not re.match(self.header_marker, p)))
-
+                    and not self.intro_marker.match(p)
+                    and not self.header_marker.match(p)))
 
     def _init_chapters(self) -> Dict[int, List[TextOrTable]]:
 
         paragraphs_from_intro = dropwhile(
-            lambda p: (not isinstance(p, str)
-                       or not re.match(self.intro_marker, p)),
+            lambda p: not isinstance(p, str) or not self.intro_marker.match(p),
             self.paragraphs)
 
         _chapters = groupby(paragraphs_from_intro, self._chapter_indexer())
@@ -100,8 +108,8 @@ class BookLoader:
         _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
         _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)\
                                     if isinstance(p, str) else p,\
-                                    _paragraphs)
-        # e.g. habi- tuellement, inci- dence => habituellement, incidence
+                                    _paragraphs) # e.g. habi- tuellement => habituellement
+
 
         return _paragraphs
 
