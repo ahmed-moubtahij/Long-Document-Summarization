@@ -13,7 +13,7 @@ def main(args) -> None:
     book = BookLoader(data_path)
     print(book.chapters[0])
 
-# pylint: disable=no-member # `setattr` dynamic members are opaque to type checkers
+
 class BookLoader:
 # TODO: --too-few-public-methods.
 # As a data loader, Should this be a dataclass? Look into their usecases
@@ -100,6 +100,7 @@ def get_args() -> argparse.Namespace:
                             default="D5627-Dolan.docx",
                             help=("File name with the text to summarize"))
     return arg_parser.parse_args()
+
 
 if __name__ == "__main__":
 
