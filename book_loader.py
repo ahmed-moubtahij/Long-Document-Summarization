@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import argparse
 from pathlib import Path
-from typing import Any, Iterator, List, Union, Dict, Callable, Literal, TypeAlias
+from typing import Any, Iterator, Callable, Literal, TypeAlias
 import re
 from itertools import chain, dropwhile, groupby
 import docx
@@ -33,20 +33,21 @@ def get_args() -> argparse.Namespace:
 
 # pylint: disable=no-member # `setattr` dynamic members are opaque to type checkers
 class BookLoader:
-# TODO: --too-few-public-methods. As a data loader, Should this be a dataclass? Look into their usecases
+# TODO: --too-few-public-methods.
+# As a data loader, Should this be a dataclass? Look into their usecases
 
-    Table: TypeAlias = List[dict]
-    TextOrTable: TypeAlias = Union[str, Table]
+    Table: TypeAlias = list[dict]
+    TextOrTable: TypeAlias = str | Table
     Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
 
-    default_markers: Dict[Marker, re.Pattern[str]] = {
+    default_markers: dict[Marker, re.Pattern[str]] = {
         "intro_marker": re.compile(r"^Introduction$"),
         "chapter_marker": re.compile(r"^Chapitre (\d+) \/$"),
         "header_marker": re.compile(r"^Chapitre \d+ \/.*")
     }
 
     def __init__(self, data_path: Path, title="",
-                 markers: Dict[Marker, re.Pattern[str]] | None=None):
+                 markers: dict[Marker, re.Pattern[str]] | None=None):
 
         assert data_path.exists()
         self.docx: dict = simplify(docx.Document(data_path))
@@ -55,7 +56,7 @@ class BookLoader:
 
         if markers is None:
             markers = {}
-        for marker, default_pattern in BookLoader.default_markers.items():
+        for marker, default_pattern in self.__class__.default_markers.items():
             setattr(self, marker, markers.get(marker, default_pattern))
 
         self.chapters = self._init_chapters()
@@ -65,7 +66,7 @@ class BookLoader:
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
         current_chapter = 0
-        def indexer(paragraph: Union[str, List[dict]]) -> int:
+        def indexer(paragraph: str | list[dict]) -> int:
             nonlocal current_chapter
             if isinstance(paragraph, str):
                 if found_chapter := self.chapter_marker.search(paragraph):
@@ -83,7 +84,7 @@ class BookLoader:
                     and not self.intro_marker.match(p)
                     and not self.header_marker.match(p)))
 
-    def _init_chapters(self) -> Dict[int, List[TextOrTable]]:
+    def _init_chapters(self) -> dict[int, list[TextOrTable]]:
 
         paragraphs_from_intro = dropwhile(
             lambda p: not isinstance(p, str) or not self.intro_marker.match(p),
@@ -96,7 +97,7 @@ class BookLoader:
 
     def _init_paragraphs(self) -> Iterator[TextOrTable]:
 
-        _docx: List[dict] = self.docx["VALUE"][0]["VALUE"]
+        _docx: list[dict] = self.docx["VALUE"][0]["VALUE"]
 
         _paragraphs: Iterator[Any]
         _paragraphs = map(lambda p: p["VALUE"], _docx)
