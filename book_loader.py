@@ -9,16 +9,9 @@ from simplify_docx import simplify
 
 
 def main(args) -> None:
-    data_path = make_data_path(args.data_dir, args.data_fn)
-    book = BookLoader(data_path)
+    data_path = Path(args.data_dir + args.data_fn).expanduser().resolve()
+    book = BookLoader(data_path, markers={"intro_marker": re.compile(r"^Introooo$")})
     print(book.chapters[0])
-
-
-def make_data_path(data_dir: str, data_fn: str) -> Path:
-    data_path = Path(data_dir + data_fn).expanduser().resolve()
-    assert data_path.exists()
-    return data_path
-
 
 def get_args() -> argparse.Namespace:
     arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -30,7 +23,6 @@ def get_args() -> argparse.Namespace:
                             help=("File name with the text to summarize"))
     return arg_parser.parse_args()
 
-
 # pylint: disable=no-member # `setattr` dynamic members are opaque to type checkers
 class BookLoader:
 # TODO: --too-few-public-methods.
@@ -40,11 +32,9 @@ class BookLoader:
     TextOrTable: TypeAlias = str | Table
     Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
 
-    default_markers: dict[Marker, re.Pattern[str]] = {
-        "intro_marker": re.compile(r"^Introduction$"),
-        "chapter_marker": re.compile(r"^Chapitre (\d+) \/$"),
-        "header_marker": re.compile(r"^Chapitre \d+ \/.*")
-    }
+    intro_marker = re.compile(r"^Introduction$")
+    chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
+    header_marker = re.compile(r"^Chapitre \d+ \/.*")
 
     def __init__(self, data_path: Path, title="",
                  markers: dict[Marker, re.Pattern[str]] | None=None):
@@ -54,10 +44,8 @@ class BookLoader:
         self.paragraphs = self._init_paragraphs()
         self.title = title if title else next(self.paragraphs)
 
-        if markers is None:
-            markers = {}
-        for marker, default_pattern in self.__class__.default_markers.items():
-            setattr(self, marker, markers.get(marker, default_pattern))
+        if markers is not None:
+            self.__dict__.update(markers)
 
         self.chapters = self._init_chapters()
         # TODO: Have a property getter for self.chapters.
@@ -71,7 +59,6 @@ class BookLoader:
             if isinstance(paragraph, str):
                 if found_chapter := self.chapter_marker.search(paragraph):
                     current_chapter = int(found_chapter.group(1))
-
             return current_chapter
 
         return indexer
