@@ -1,6 +1,7 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import argparse
 from pathlib import Path
+# TODO: https://peps.python.org/pep-0585/
 from typing import Any, Iterator, Callable, Literal, TypeAlias
 import re
 from itertools import chain, dropwhile, groupby
@@ -8,18 +9,8 @@ import docx
 from simplify_docx import simplify
 
 
-def main(args) -> None:
-    data_path = Path(args.data_dir + args.data_fn).expanduser().resolve()
-    book = BookLoader(data_path)
-    print(book.chapters[0])
-
-
-class BookLoader:
-# TODO: --too-few-public-methods.
-# As a data loader, Should this be a dataclass? Look into their usecases
-
-    Table: TypeAlias = list[dict]
-    TextOrTable: TypeAlias = str | Table
+class BookLoader: # pylint: disable=too-few-public-methods
+    TextOrTable: TypeAlias = str | list[dict]
     Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
 
     intro_marker = re.compile(r"^Introduction$")
@@ -30,16 +21,14 @@ class BookLoader:
                  markers: dict[Marker, re.Pattern[str]] | None=None):
 
         assert data_path.exists()
-        self.docx: dict = simplify(docx.Document(data_path))
-        self.paragraphs = self._init_paragraphs()
-        self.title = title if title else next(self.paragraphs)
+        self._docx = simplify(docx.Document(data_path))
+        self._paragraphs = self._init_paragraphs()
+        self.title = title if title else next(self._paragraphs)
 
         if markers is not None:
             self.__dict__.update(markers) # type: ignore[arg-type]
 
         self.chapters = self._init_chapters()
-        # TODO: Have a property getter for self.chapters.
-        # This could help with pylint's `too-few-public-methods`
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
@@ -65,7 +54,7 @@ class BookLoader:
 
         paragraphs_from_intro = dropwhile(
             lambda p: not isinstance(p, str) or not self.intro_marker.match(p),
-            self.paragraphs)
+            self._paragraphs)
 
         _chapters = groupby(paragraphs_from_intro, self._chapter_indexer())
         chapters = {idx: list(self._strip_headers(paragraphs))
@@ -74,7 +63,7 @@ class BookLoader:
 
     def _init_paragraphs(self) -> Iterator[TextOrTable]:
 
-        _docx: list[dict] = self.docx["VALUE"][0]["VALUE"]
+        _docx: list[dict] = self._docx["VALUE"][0]["VALUE"]
 
         _paragraphs: Iterator[Any]
         _paragraphs = map(lambda p: p["VALUE"], _docx)
@@ -87,9 +76,8 @@ class BookLoader:
         _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)\
                                     if isinstance(p, str) else p,\
                                     _paragraphs) # e.g. habi- tuellement => habituellement
-
-
         return _paragraphs
+
 
 def get_args() -> argparse.Namespace:
     arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -101,6 +89,11 @@ def get_args() -> argparse.Namespace:
                             help=("File name with the text to summarize"))
     return arg_parser.parse_args()
 
+
+def main(args) -> None:
+    data_path = Path(args.data_dir + args.data_fn).expanduser().resolve()
+    book = BookLoader(data_path)
+    print(book.chapters[0])
 
 if __name__ == "__main__":
 
