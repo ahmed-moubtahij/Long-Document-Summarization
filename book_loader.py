@@ -1,8 +1,7 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-import argparse
 from pathlib import Path
-# TODO: https://peps.python.org/pep-0585/
-from typing import Any, Iterator, Callable, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
+from collections.abc import Iterator, Callable
 import re
 from itertools import chain, dropwhile, groupby
 import docx
@@ -21,13 +20,13 @@ class BookLoader: # pylint: disable=too-few-public-methods
                  markers: dict[Marker, re.Pattern[str]] | None=None):
 
         assert data_path.exists()
+
         self._docx = simplify(docx.Document(data_path))
         self._paragraphs = self._init_paragraphs()
-        self.title = title if title else next(self._paragraphs)
 
+        self.title = title if title else next(self._paragraphs)
         if markers is not None:
             self.__dict__.update(markers) # type: ignore[arg-type]
-
         self.chapters = self._init_chapters()
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
@@ -79,7 +78,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
         return _paragraphs
 
 
-def get_args() -> argparse.Namespace:
+def get_args():
     arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-d', '--data-dir', type=str,
                             default="data/",
