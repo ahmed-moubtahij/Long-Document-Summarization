@@ -9,7 +9,8 @@ from simplify_docx import simplify
 
 
 class BookLoader: # pylint: disable=too-few-public-methods
-    TextOrTable: TypeAlias = str | list[dict]
+    Text: TypeAlias = str
+    TextOrTable: TypeAlias = Text | list[dict]
     Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
 
     intro_marker = re.compile(r"^Introduction$")
@@ -32,9 +33,9 @@ class BookLoader: # pylint: disable=too-few-public-methods
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
         current_chapter = 0
-        def indexer(paragraph: str | list[dict]) -> int:
+        def indexer(paragraph: BookLoader.TextOrTable) -> int:
             nonlocal current_chapter
-            if isinstance(paragraph, str):
+            if isinstance(paragraph, BookLoader.Text):
                 if found_chapter := self.chapter_marker.search(paragraph):
                     current_chapter = int(found_chapter.group(1))
             return current_chapter
@@ -44,21 +45,22 @@ class BookLoader: # pylint: disable=too-few-public-methods
     def _strip_headers(self, paragraphs: Iterator[TextOrTable]) -> Iterator[TextOrTable]:
 
         return (p for p in paragraphs
-                if not isinstance(p, str) # not str => Table => not a header
+                if not isinstance(p, BookLoader.Text) # not text => not a header
                 or (p != self.title
                     and not self.intro_marker.match(p)
                     and not self.header_marker.match(p)))
 
-    def _init_chapters(self) -> dict[int, list[TextOrTable]]:
+    def _init_chapters(self) -> list[list[TextOrTable]]:
 
-        paragraphs_from_intro = dropwhile(
-            lambda p: not isinstance(p, str) or not self.intro_marker.match(p),
+        start_from_intro = dropwhile(
+            lambda p: (not isinstance(p, BookLoader.Text)
+                       or not self.intro_marker.match(p)),
             self._paragraphs)
 
-        _chapters = groupby(paragraphs_from_intro, self._chapter_indexer())
-        chapters = {idx: list(self._strip_headers(paragraphs))
-                    for idx, paragraphs in _chapters}
-        return chapters
+        _chapters = groupby(start_from_intro, self._chapter_indexer())
+
+        return [list(self._strip_headers(paragraphs))
+                for _, paragraphs in _chapters]
 
     def _init_paragraphs(self) -> Iterator[TextOrTable]:
 
