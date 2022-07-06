@@ -63,26 +63,25 @@ class BookLoader: # pylint: disable=too-few-public-methods
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
 
-        document: list[dict[str, Any]] = simple_docx["VALUE"][0]["VALUE"]
+        document: Iterator[list[dict[str, TextOrTable]]] = (
+            p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
+            if p["VALUE"] != "[w:sdt]")
 
-        _paragraphs = map(
-            (lambda p: p["VALUE"][0]["VALUE"] # extract raw text
-             if p["TYPE"] == "paragraph"
-             else p["VALUE"]), document) # keep object (e.g. table) as-is
+        # Extract text, otherwise preserve object e.g. table
+        _paragraphs: Iterator[TextOrTable] = map(
+            lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
 
-        start_from: Iterator[TextOrTable] = dropwhile(
-            lambda p: not isinstance(p, str) or not self.start_marker.match(p),
-            _paragraphs)
+        def seeking_marker(marker: re.Pattern[str]) -> Callable[[TextOrTable], bool]:
+            return lambda p: not isinstance(p, str) or not marker.match(p)
 
-        end_at = takewhile(
-            lambda p: not isinstance(p, str) or not self.end_marker.match(p),
-            start_from)
+        lower_bounded = dropwhile(seeking_marker(self.start_marker), _paragraphs)
+        upper_bounded = takewhile(seeking_marker(self.end_marker), lower_bounded)
 
         # TODO: There was an "interpré- tation" in the summary output.
         # e.g. habi- tuellement => habituellement
         clean_paragraphs: Iterator[TextOrTable] = map(
             (lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-             if isinstance(p, str) else p), end_at)
+             if isinstance(p, str) else p), upper_bounded)
 
         return clean_paragraphs
 
