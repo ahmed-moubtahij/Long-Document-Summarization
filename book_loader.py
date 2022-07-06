@@ -8,10 +8,11 @@ import docx
 from simplify_docx import simplify
 
 
+Text: TypeAlias = str
+TextOrTable: TypeAlias = Text | list[dict]
+Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
+
 class BookLoader: # pylint: disable=too-few-public-methods
-    Text: TypeAlias = str
-    TextOrTable: TypeAlias = Text | list[dict]
-    Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
 
     intro_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
@@ -33,9 +34,9 @@ class BookLoader: # pylint: disable=too-few-public-methods
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
         current_chapter = 0
-        def indexer(paragraph: BookLoader.TextOrTable) -> int:
+        def indexer(paragraph: TextOrTable) -> int:
             nonlocal current_chapter
-            if isinstance(paragraph, BookLoader.Text):
+            if isinstance(paragraph, Text):
                 if found_chapter := self.chapter_marker.search(paragraph):
                     current_chapter = int(found_chapter.group(1))
             return current_chapter
@@ -44,16 +45,15 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     def _strip_headers(self, paragraphs: Iterator[TextOrTable]) -> Iterator[TextOrTable]:
 
-        return (p for p in paragraphs
-                if not isinstance(p, BookLoader.Text) # not text => not a header
-                or (p != self.title
-                    and not self.intro_marker.match(p)
-                    and not self.header_marker.match(p)))
+        return (p for p in paragraphs if not isinstance(p, Text)
+                                      or (p != self.title
+                                          and not self.intro_marker.match(p)
+                                          and not self.header_marker.match(p)))
 
     def _init_chapters(self) -> list[list[TextOrTable]]:
 
         start_from_intro = dropwhile(
-            lambda p: (not isinstance(p, BookLoader.Text)
+            lambda p: (not isinstance(p, Text)
                        or not self.intro_marker.match(p)),
             self._paragraphs)
 
@@ -74,6 +74,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
         _paragraphs = chain.from_iterable(_paragraphs)
         _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
         _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
+
         _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)\
                                     if isinstance(p, str) else p,\
                                     _paragraphs) # e.g. habi- tuellement => habituellement
@@ -82,20 +83,17 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
 def get_args():
     arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    arg_parser.add_argument('-d', '--data-dir', type=str,
-                            default="data/",
-                            help="Path to directory containing the input data file")
-    arg_parser.add_argument('-f', "--data-fn", type=str,
-                            default="D5627-Dolan.docx",
-                            help=("File name with the text to summarize"))
+    arg_parser.add_argument('-f', "--data-fp", type=str,
+                            default="data/D5627-Dolan.docx",
+                            help=("Path to the docx file to summarize."))
     return arg_parser.parse_args()
 
 
 def main(args) -> None:
-    data_path = Path(args.data_dir + args.data_fn).expanduser().resolve()
+    data_path = Path(args.data_fp).expanduser().resolve()
     book = BookLoader(data_path)
     print(book.chapters[0])
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     main(get_args())
