@@ -3,33 +3,33 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 from collections.abc import Iterator, Callable
 import re
-from itertools import chain, dropwhile, groupby
+from itertools import dropwhile, takewhile, groupby
 import docx
 from simplify_docx import simplify
 
-
 Text: TypeAlias = str
-TextOrTable: TypeAlias = Text | list[dict]
-Marker: TypeAlias = Literal["intro_marker", "chapter_marker", "header_marker"]
+TextOrTable: TypeAlias = Text | list[dict[str, Any]]
+Marker: TypeAlias = Literal["start_marker", "chapter_marker",
+                            "header_marker", "end_marker"]
 
 class BookLoader: # pylint: disable=too-few-public-methods
 
-    intro_marker = re.compile(r"^Introduction$")
+    start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
     header_marker = re.compile(r"^Chapitre \d+ \/.*")
+    end_marker = re.compile(r"^Conclusion$")
 
-    def __init__(self, data_path: Path, title="",
+    def __init__(self, data_path: Path,
+                 title="Stress, santé et performance au travail",
                  markers: dict[Marker, re.Pattern[str]] | None=None):
 
-        assert data_path.exists()
+        self.title = title
+        self._paragraphs = self._parse_paragraphs(data_path)
 
-        self._docx = simplify(docx.Document(data_path))
-        self._paragraphs = self._init_paragraphs()
-
-        self.title = title if title else next(self._paragraphs)
         if markers is not None:
             self.__dict__.update(markers) # type: ignore[arg-type]
-        self.chapters = self._init_chapters()
+
+        self.chapters = self._segment_chapters()
 
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
@@ -45,40 +45,46 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     def _strip_headers(self, paragraphs: Iterator[TextOrTable]) -> Iterator[TextOrTable]:
 
-        return (p for p in paragraphs if not isinstance(p, Text)
-                                      or (p != self.title
-                                          and not self.intro_marker.match(p)
-                                          and not self.header_marker.match(p)))
+        return (p for p in paragraphs
+                if not isinstance(p, str)
+                   or p != self.title and not self.header_marker.match(p))
 
-    def _init_chapters(self) -> list[list[TextOrTable]]:
+    def _segment_chapters(self) -> list[list[TextOrTable]]:
 
-        start_from_intro = dropwhile(
-            lambda p: (not isinstance(p, Text)
-                       or not self.intro_marker.match(p)),
-            self._paragraphs)
-
-        _chapters = groupby(start_from_intro, self._chapter_indexer())
+        _chapters = groupby(self._paragraphs, self._chapter_indexer())
 
         return [list(self._strip_headers(paragraphs))
                 for _, paragraphs in _chapters]
 
-    def _init_paragraphs(self) -> Iterator[TextOrTable]:
+    def _parse_paragraphs(self, data_path) -> Iterator[TextOrTable]:
 
-        _docx: list[dict] = self._docx["VALUE"][0]["VALUE"]
+        assert data_path.exists()
+        simple_docx = simplify(docx.Document(data_path),
+                               {"include-paragraph-indent": False,
+                                "include-paragraph-numbering": False})
 
-        _paragraphs: Iterator[Any]
-        _paragraphs = map(lambda p: p["VALUE"], _docx)
-        _paragraphs = filter(lambda p: p != "[w:sdt]", _paragraphs)
-        # https://github.com/microsoft/Simplify-Docx/blob/
-        # ce493b60e3e4308bde7399257426c0c68a6c699b/src/simplify_docx/iterators/body.py#L60
-        _paragraphs = chain.from_iterable(_paragraphs)
-        _paragraphs = filter(lambda p: p["TYPE"] != "CT_Empty", _paragraphs)
-        _paragraphs = map(lambda p: p["VALUE"], _paragraphs)
+        document: list[dict[str, Any]] = simple_docx["VALUE"][0]["VALUE"]
 
-        _paragraphs = map(lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)\
-                                    if isinstance(p, str) else p,\
-                                    _paragraphs) # e.g. habi- tuellement => habituellement
-        return _paragraphs
+        _paragraphs = map(
+            (lambda p: p["VALUE"][0]["VALUE"] # extract raw text
+             if p["TYPE"] == "paragraph"
+             else p["VALUE"]), document) # keep object (e.g. table) as-is
+
+        start_from: Iterator[TextOrTable] = dropwhile(
+            lambda p: not isinstance(p, str) or not self.start_marker.match(p),
+            _paragraphs)
+
+        end_at = takewhile(
+            lambda p: not isinstance(p, str) or not self.end_marker.match(p),
+            start_from)
+
+        # TODO: There was an "interpré- tation" in the summary output.
+        # e.g. habi- tuellement => habituellement
+        clean_paragraphs: Iterator[TextOrTable] = map(
+            (lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
+             if isinstance(p, str) else p), end_at)
+
+        return clean_paragraphs
 
 
 def get_args():
