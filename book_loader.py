@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 from collections.abc import Iterator, Callable
 import re
-from itertools import dropwhile, takewhile, groupby
+from itertools import groupby
+from more_itertools import strip
 import docx
 from simplify_docx import simplify
 
@@ -17,7 +18,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
     start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
     header_marker = re.compile(r"^Chapitre \d+ \/.*")
-    end_marker = re.compile(r"^Conclusion$")
+    end_marker = re.compile(r"^Annexe /$")
 
     def __init__(self, data_path: Path,
                  title="Stress, santé et performance au travail",
@@ -56,6 +57,14 @@ class BookLoader: # pylint: disable=too-few-public-methods
         return [list(self._strip_headers(paragraphs))
                 for _, paragraphs in _chapters]
 
+    def _seeking_bounds(self, paragraph: re.Pattern[str]) -> bool:
+
+        if not isinstance(paragraph, Text):
+            return True
+
+        return (not self.start_marker.match(paragraph)
+                and not self.end_marker.match(paragraph))
+
     def _parse_paragraphs(self, data_path) -> Iterator[TextOrTable]:
 
         assert data_path.exists()
@@ -68,20 +77,16 @@ class BookLoader: # pylint: disable=too-few-public-methods
             if p["VALUE"] != "[w:sdt]")
 
         # Extract text, otherwise preserve object e.g. table
-        _paragraphs: Iterator[TextOrTable] = map(
+        paragraphs: Iterator[TextOrTable] = map(
             lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
 
-        def seeking_marker(marker: re.Pattern[str]) -> Callable[[TextOrTable], bool]:
-            return lambda p: not isinstance(p, str) or not marker.match(p)
-
-        lower_bounded = dropwhile(seeking_marker(self.start_marker), _paragraphs)
-        upper_bounded = takewhile(seeking_marker(self.end_marker), lower_bounded)
+        bounded_doc = strip(paragraphs, self._seeking_bounds)
 
         # TODO: There was an "interpré- tation" in the summary output.
         # e.g. habi- tuellement => habituellement
         clean_paragraphs: Iterator[TextOrTable] = map(
             (lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-             if isinstance(p, str) else p), upper_bounded)
+             if isinstance(p, str) else p), bounded_doc)
 
         return clean_paragraphs
 
