@@ -25,7 +25,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
                  markers: dict[Marker, re.Pattern[str]] | None=None):
 
         self.title = title
-        self._paragraphs = self._parse_paragraphs(data_path)
+        self._paragraphs = self._etl_paragraphs(data_path)
 
         if markers is not None:
             self.__dict__.update(markers) # type: ignore[arg-type]
@@ -65,21 +65,21 @@ class BookLoader: # pylint: disable=too-few-public-methods
         return (not self.start_marker.match(paragraph)
                 and not self.end_marker.match(paragraph))
 
-    def _parse_paragraphs(self, data_path) -> Iterator[TextOrTable]:
-
+    def _extract_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
         assert data_path.exists()
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-
         document: Iterator[list[dict[str, TextOrTable]]] = (
             p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
             if p["VALUE"] != "[w:sdt]")
 
-        # Extract text, otherwise preserve object e.g. table
-        paragraphs: Iterator[TextOrTable] = map(
+        return map( # Extract text, otherwise preserve object e.g. table
             lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
 
+    def _etl_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
+
+        paragraphs = self._extract_paragraphs(data_path)
         bounded_doc = strip(paragraphs, self._seeking_bounds)
 
         # TODO: There was an "interpré- tation" in the summary output.
