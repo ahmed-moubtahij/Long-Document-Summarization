@@ -17,7 +17,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
-    header_marker = re.compile(r"^Chapitre \d+ \/.*")
+    header_marker = re.compile(rf"(?:^Chapitre \d+ \/.+|{start_marker.pattern})")
     end_marker = re.compile(r"^Annexe /$")
 
     def __init__(self, data_path: Path,
@@ -44,18 +44,19 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
         return indexer
 
-    def _strip_headers(self, paragraphs: Iterator[TextOrTable]) -> Iterator[TextOrTable]:
+    def _is_not_header(self, paragraph: TextOrTable) -> bool:
 
-        return (p for p in paragraphs
-                if not isinstance(p, str)
-                   or p != self.title and not self.header_marker.match(p))
+        if not isinstance(paragraph, Text):
+            return True
+
+        return (paragraph != self.title and
+                not self.header_marker.match(paragraph))
 
     def _segment_chapters(self) -> list[list[TextOrTable]]:
 
         _chapters = groupby(self._paragraphs, self._chapter_indexer())
 
-        return [list(self._strip_headers(paragraphs))
-                for _, paragraphs in _chapters]
+        return [list(paragraphs) for _, paragraphs in _chapters]
 
     def _seeking_bounds(self, paragraph: re.Pattern[str]) -> bool:
 
@@ -82,11 +83,15 @@ class BookLoader: # pylint: disable=too-few-public-methods
         paragraphs = self._extract_paragraphs(data_path)
         bounded_doc = strip(paragraphs, self._seeking_bounds)
 
+        # TODO: strip headers here
+        valid_paragraphs = filter(self._is_not_header, bounded_doc)
+        # valid_paragraphs = list(valid_paragraphs)
+
         # TODO: There was an "interpré- tation" in the summary output.
         # e.g. habi- tuellement => habituellement
         clean_paragraphs: Iterator[TextOrTable] = map(
             (lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-             if isinstance(p, str) else p), bounded_doc)
+             if isinstance(p, str) else p), valid_paragraphs)
 
         return clean_paragraphs
 
