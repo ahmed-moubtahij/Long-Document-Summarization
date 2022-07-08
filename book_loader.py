@@ -1,28 +1,37 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
-from itertools import groupby
+from itertools import chain, groupby
 from more_itertools import strip
 import docx
 from simplify_docx import simplify
 
 Text: TypeAlias = str
 TextOrTable: TypeAlias = Text | list[dict[str, Any]]
-Marker: TypeAlias = Literal["start_marker", "chapter_marker",
-                            "header_marker", "end_marker"]
+MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
+                               "header_marker", "end_marker",
+                               "na_span_markers"]
+Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
 class BookLoader: # pylint: disable=too-few-public-methods
 
     start_marker = re.compile(r"^Introduction$")
-    chapter_marker = re.compile(r"^Chapitre (\d+) \/$")
-    header_marker = re.compile(rf"(?:^Chapitre \d+ \/.+|{start_marker.pattern})")
+    chapter_marker = re.compile(r"^Chapitre (\d+) /$")
+    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+|{start_marker.pattern})")
     end_marker = re.compile(r"^Annexe /$")
+    na_span_markers = (
+        [re.compile(r"^exerCiCe \d\.\d /$")],
+        [re.compile(fr"{chapter_marker.pattern}"),
+         re.compile(r"^Les caractéristiques personnelles\."),
+         re.compile(r"/\tLocus de contrôle$"),
+         re.compile(r"^L'observation de sujets a amené Rotter"),
+         re.compile(r"^Lorsqu'une personne souffre de stress")])
 
     def __init__(self, data_path: Path,
                  title="Stress, santé et performance au travail",
-                 markers: dict[Marker, re.Pattern[str]] | None=None):
+                 markers: dict[MarkerKey, Marker] | None=None):
 
         self.title = title
         self._paragraphs = self._etl_paragraphs(data_path)
@@ -67,6 +76,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
                 and not self.end_marker.match(paragraph))
 
     def _extract_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
+
         assert data_path.exists()
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
@@ -78,14 +88,30 @@ class BookLoader: # pylint: disable=too-few-public-methods
         return map( # Extract text, otherwise preserve object e.g. table
             lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
 
+
+    def _spans_validator(self) -> Callable[[TextOrTable], bool]:
+        valid = True
+
+        def validator(paragraph):
+            nonlocal valid
+            if isinstance(paragraph, Text):
+                bound_markers = self.na_span_markers[1 - valid]
+                if any(map(lambda pat: pat.match(paragraph), bound_markers)):
+                    valid = not valid
+            return valid
+
+        return validator
+
     def _etl_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
 
         paragraphs = self._extract_paragraphs(data_path)
         bounded_doc = strip(paragraphs, self._seeking_bounds)
+        headless_paragraphs = filter(self._is_not_header, bounded_doc)
 
-        # TODO: strip headers here
-        valid_paragraphs = filter(self._is_not_header, bounded_doc)
-        # valid_paragraphs = list(valid_paragraphs)
+        valid_paragraphs = chain.from_iterable(
+            list(paragraph) for valid, paragraph in
+            groupby(headless_paragraphs, self._spans_validator())
+            if valid)
 
         # TODO: There was an "interpré- tation" in the summary output.
         # e.g. habi- tuellement => habituellement
