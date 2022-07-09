@@ -55,24 +55,22 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
         return indexer
 
+    def _match(self, marker: re.Pattern[str], paragraph: TextOrTable) -> bool:
+
+        return isinstance(paragraph, str) and bool(marker.match(paragraph))
+
     def _is_not_header(self, paragraph: TextOrTable) -> bool:
 
-        if not isinstance(paragraph, Text):
-            return True
-
-        return (paragraph != self.title and
-                not self.header_marker.match(paragraph))
+        return (paragraph != self.title
+                and not self._match(self.header_marker, paragraph))
 
     def _segment_chapters(self) -> list[list[TextOrTable]]:
 
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        # TODO: Check a partial method wrapper for pre-checking str before calling match
         last_chapter, post_scriptum = split_at(
-            chapters[-1],
-            lambda _p: isinstance(_p, Text) and self.ps_marker.match(_p), maxsplit=1)
-
+            chapters[-1], lambda _p: self._match(self.ps_marker, _p), maxsplit=1)
         chapters[-1] = last_chapter
         chapters.extend([post_scriptum])
 
@@ -80,11 +78,8 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     def _seeking_bounds(self, paragraph: TextOrTable) -> bool:
 
-        if not isinstance(paragraph, Text):
-            return True
-
-        return (not self.start_marker.match(paragraph)
-                and not self.end_marker.match(paragraph))
+        return (not self._match(self.start_marker, paragraph)
+                and not self._match(self.end_marker, paragraph))
 
     def _extract_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
 
@@ -100,6 +95,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
 
     def _spans_validator(self) -> Callable[[TextOrTable], bool]:
+
         valid = True
 
         def validator(paragraph):
@@ -129,6 +125,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
 
 def get_args():
+
     arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-f', "--data-fp", type=str,
                             default="data/D5627-Dolan.docx",
@@ -137,6 +134,7 @@ def get_args():
 
 
 def main(args) -> None:
+
     data_path = Path(args.data_fp).expanduser().resolve()
     book = BookLoader(data_path)
     print(book.chapters[0])
