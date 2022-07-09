@@ -4,7 +4,7 @@ from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
 from itertools import chain, groupby
-from more_itertools import strip
+from more_itertools import strip, split_at
 import docx
 from simplify_docx import simplify
 
@@ -12,7 +12,7 @@ Text: TypeAlias = str
 TextOrTable: TypeAlias = Text | list[dict[str, Any]]
 MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                "header_marker", "end_marker",
-                               "na_span_markers"]
+                               "ps_marker", "na_span_markers"]
 Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
 class BookLoader: # pylint: disable=too-few-public-methods
@@ -21,6 +21,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
     chapter_marker = re.compile(r"^Chapitre (\d+) /$")
     header_marker = re.compile(rf"(?:^Chapitre \d+ /.+|{start_marker.pattern})")
     end_marker = re.compile(r"^Annexe /$")
+    ps_marker = re.compile(r"^Conclusion$")
     na_span_markers = (
         [re.compile(r"^exerCiCe \d\.\d /$")],
         [re.compile(fr"{chapter_marker.pattern}"),
@@ -44,6 +45,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
     def _chapter_indexer(self) -> Callable[[TextOrTable], int]:
 
         current_chapter = 0
+
         def indexer(paragraph: TextOrTable) -> int:
             nonlocal current_chapter
             if isinstance(paragraph, Text):
@@ -63,11 +65,20 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     def _segment_chapters(self) -> list[list[TextOrTable]]:
 
-        _chapters = groupby(self._paragraphs, self._chapter_indexer())
+        chapters = [list(paragraphs) for _, paragraphs in
+                    groupby(self._paragraphs, self._chapter_indexer())]
 
-        return [list(paragraphs) for _, paragraphs in _chapters]
+        # TODO: Check a partial method wrapper for pre-checking str before calling match
+        last_chapter, post_scriptum = split_at(
+            chapters[-1],
+            lambda _p: isinstance(_p, Text) and self.ps_marker.match(_p), maxsplit=1)
 
-    def _seeking_bounds(self, paragraph: re.Pattern[str]) -> bool:
+        chapters[-1] = last_chapter
+        chapters.extend([post_scriptum])
+
+        return chapters
+
+    def _seeking_bounds(self, paragraph: TextOrTable) -> bool:
 
         if not isinstance(paragraph, Text):
             return True
@@ -81,9 +92,8 @@ class BookLoader: # pylint: disable=too-few-public-methods
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        document: Iterator[list[dict[str, TextOrTable]]] = (
-            p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
-            if p["VALUE"] != "[w:sdt]")
+        document = (p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
+                    if p["VALUE"] != "[w:sdt]")
 
         return map( # Extract text, otherwise preserve object e.g. table
             lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
