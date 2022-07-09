@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
-from itertools import chain, groupby
+from itertools import groupby
 from more_itertools import strip, split_at
 import docx
 from simplify_docx import simplify
@@ -24,7 +24,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
     ps_marker = re.compile(r"^Conclusion$")
     na_span_markers = (
         [re.compile(r"^exerCiCe \d\.\d /$")],
-        [re.compile(fr"{chapter_marker.pattern}"),
+        [chapter_marker,
          re.compile(r"^Les caractéristiques personnelles\."),
          re.compile(r"/\tLocus de contrôle$"),
          re.compile(r"^L'observation de sujets a amené Rotter"),
@@ -117,11 +117,7 @@ class BookLoader: # pylint: disable=too-few-public-methods
         paragraphs = self._extract_paragraphs(data_path)
         bounded_doc = strip(paragraphs, self._seeking_bounds)
         headless_paragraphs = filter(self._is_not_header, bounded_doc)
-
-        valid_paragraphs = chain.from_iterable(
-            list(paragraph) for valid, paragraph in
-            groupby(headless_paragraphs, self._spans_validator())
-            if valid)
+        valid_paragraphs = filter(self._spans_validator(), headless_paragraphs)
 
         # TODO: There was an "interpré- tation" in the summary output.
         # e.g. habi- tuellement => habituellement
