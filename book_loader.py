@@ -15,11 +15,13 @@ MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                "ps_marker", "na_span_markers"]
 Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
-class BookLoader: # pylint: disable=too-few-public-methods
+class BookLoader:
 
     start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) /$")
-    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+|{start_marker.pattern})")
+    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
+                               rf"|{start_marker.pattern}"
+                               rf"|^Stress, santé et performance au travail$)")
     end_marker = re.compile(r"^Annexe /$")
     ps_marker = re.compile(r"^Conclusion$")
     na_span_markers = (
@@ -31,10 +33,8 @@ class BookLoader: # pylint: disable=too-few-public-methods
          re.compile(r"^Lorsqu'une personne souffre de stress")])
 
     def __init__(self, data_path: Path,
-                 title="Stress, santé et performance au travail",
                  markers: dict[MarkerKey, Marker] | None=None):
 
-        self.title = title
         self._paragraphs = self._etl_paragraphs(data_path)
 
         if markers is not None:
@@ -55,44 +55,38 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
         return indexer
 
-    def _match(self, marker: re.Pattern[str], paragraph: TextOrTable) -> bool:
+    def _is_not_header(self) -> Callable[[TextOrTable], bool]:
 
-        return isinstance(paragraph, str) and bool(marker.match(paragraph))
+        is_start = True
 
-    def _is_not_header(self, paragraph: TextOrTable) -> bool:
+        def not_header(paragraph):
+            nonlocal is_start
+            header_match = self.__class__.match(self.header_marker, paragraph)
+            if is_start and header_match:
+                is_start = False
+                return True
 
-        return (paragraph != self.title
-                and not self._match(self.header_marker, paragraph))
+            return not header_match
+
+        return not_header
 
     def _segment_chapters(self) -> list[list[TextOrTable]]:
 
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        last_chapter, post_scriptum = split_at(
-            chapters[-1], lambda _p: self._match(self.ps_marker, _p), maxsplit=1)
+        last_chapter, sep, post_scriptum = split_at(
+            chapters[-1], lambda _p: self.__class__.match(self.ps_marker, _p),
+            maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
-        chapters.extend([post_scriptum])
+        chapters.extend([sep + post_scriptum])
 
         return chapters
 
     def _seeking_bounds(self, paragraph: TextOrTable) -> bool:
 
-        return (not self._match(self.start_marker, paragraph)
-                and not self._match(self.end_marker, paragraph))
-
-    def _extract_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
-
-        assert data_path.exists()
-        simple_docx = simplify(docx.Document(data_path),
-                               {"include-paragraph-indent": False,
-                                "include-paragraph-numbering": False})
-        document = (p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
-                    if p["VALUE"] != "[w:sdt]")
-
-        return map( # Extract text, otherwise preserve object e.g. table
-            lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
-
+        return (not self.__class__.match(self.start_marker, paragraph)
+                and not self.__class__.match(self.end_marker, paragraph))
 
     def _spans_validator(self) -> Callable[[TextOrTable], bool]:
 
@@ -110,18 +104,39 @@ class BookLoader: # pylint: disable=too-few-public-methods
 
     def _etl_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
 
-        paragraphs = self._extract_paragraphs(data_path)
+        paragraphs = self.__class__.extract_paragraphs(data_path)
         bounded_doc = strip(paragraphs, self._seeking_bounds)
-        headless_paragraphs = filter(self._is_not_header, bounded_doc)
+        headless_paragraphs = filter(self._is_not_header(), bounded_doc)
         valid_paragraphs = filter(self._spans_validator(), headless_paragraphs)
-
-        # TODO: There was an "interpré- tation" in the summary output.
-        # e.g. habi- tuellement => habituellement
-        clean_paragraphs: Iterator[TextOrTable] = map(
-            (lambda p: re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", p)
-             if isinstance(p, str) else p), valid_paragraphs)
+        clean_paragraphs = map(self.__class__.join_bisected_word, valid_paragraphs)
 
         return clean_paragraphs
+
+    @staticmethod
+    def match(marker: re.Pattern[str], paragraph: TextOrTable) -> bool:
+
+        return isinstance(paragraph, str) and bool(marker.match(paragraph))
+
+    @staticmethod
+    def join_bisected_word(paragraph: TextOrTable) -> TextOrTable:
+
+        if not isinstance(paragraph, str):
+            return paragraph
+
+        return re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", paragraph)
+
+    @staticmethod
+    def extract_paragraphs(data_path: Path) -> Iterator[TextOrTable]:
+
+        assert data_path.exists()
+        simple_docx = simplify(docx.Document(data_path),
+                               {"include-paragraph-indent": False,
+                                "include-paragraph-numbering": False})
+        document = (p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
+                    if p["VALUE"] != "[w:sdt]")
+
+        return map( # Extract text, otherwise preserve object e.g. table
+            lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
 
 
 def get_args():
