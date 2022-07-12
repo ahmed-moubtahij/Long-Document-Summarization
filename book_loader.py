@@ -98,6 +98,7 @@ class BookLoader:
                 bound_markers = self.na_span_markers[1 - valid]
                 if any(map(lambda pat: pat.match(paragraph), bound_markers)):
                     valid = not valid
+
             return valid
 
         return validator
