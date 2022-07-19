@@ -1,15 +1,17 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from operator import itemgetter
 from pathlib import Path
 from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
-from more_itertools import strip, split_at
+from more_itertools import strip, split_at, one
 import docx
 from simplify_docx import simplify
 
 Text: TypeAlias = str
-TextOrTable: TypeAlias = Text | list[dict[str, Any]]
+Table: TypeAlias = list[dict[str, Any]]
+TextOrTable: TypeAlias = Text | Table
 MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                "header_marker", "end_marker",
                                "ps_marker", "na_span_markers"]
@@ -50,7 +52,7 @@ class BookLoader:
             nonlocal current_chapter
             if isinstance(paragraph, Text):
                 if found_chapter := self.chapter_marker.search(paragraph):
-                    current_chapter = int(found_chapter.group(1))
+                    current_chapter = int(found_chapter.group(1)) # type: ignore[union-attr]
             return current_chapter
 
         return indexer
@@ -75,11 +77,11 @@ class BookLoader:
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        last_chapter, sep, post_scriptum = split_at(
+        last_chapter, separator, post_scriptum = split_at(
             chapters[-1], lambda _p: self.__class__.match(self.ps_marker, _p),
             maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
-        chapters.extend([sep + post_scriptum])
+        chapters.extend([separator + post_scriptum])
 
         return chapters
 
@@ -109,7 +111,11 @@ class BookLoader:
         bounded_doc = strip(paragraphs, self._seeking_bounds)
         headless_paragraphs = filter(self._is_not_header(), bounded_doc)
         valid_paragraphs = filter(self._spans_validator(), headless_paragraphs)
-        clean_paragraphs = map(self.__class__.join_bisected_word, valid_paragraphs)
+        clean_paragraphs = map(self.__class__.join_bisected_words, valid_paragraphs)
+
+        # TODO: Extract tables contents
+        # tables = filter(lambda p: not isinstance(p, str), clean_paragraphs)
+        # tables = list(tables)
 
         return clean_paragraphs
 
@@ -119,12 +125,20 @@ class BookLoader:
         return isinstance(paragraph, str) and bool(marker.match(paragraph))
 
     @staticmethod
-    def join_bisected_word(paragraph: TextOrTable) -> TextOrTable:
+    def join_bisected_words(paragraph: TextOrTable) -> TextOrTable:
 
         if not isinstance(paragraph, str):
             return paragraph
 
         return re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", paragraph)
+
+    I: TypeAlias = Iterator[list[dict[str, TextOrTable]]]
+    @staticmethod
+    def remove_ct_empty(doc: I) -> I:
+
+        doc = map(lambda p: [u for u in p if u["TYPE"] != "CT_Empty"], doc)
+
+        return filter(bool, doc)
 
     @staticmethod
     def extract_paragraphs(data_path: Path) -> Iterator[TextOrTable]:
@@ -133,11 +147,10 @@ class BookLoader:
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        document = (p["VALUE"] for p in simple_docx["VALUE"][0]["VALUE"]
-                    if p["VALUE"] != "[w:sdt]")
+        _doc = map(itemgetter("VALUE"), simple_docx["VALUE"][0]["VALUE"])
+        doc = BookLoader.remove_ct_empty(filter(lambda p: p != "[w:sdt]", _doc))
 
-        return map( # Extract text, otherwise preserve object e.g. table
-            lambda p: p[0]["VALUE"] if p[0]["TYPE"] == "text" else p, document)
+        return map(lambda p: one(p)["VALUE"] if p[0]["TYPE"] == "text" else p, doc)
 
 
 def get_args():
