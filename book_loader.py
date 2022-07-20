@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from functools import partial
 from operator import itemgetter
 from pathlib import Path
 from typing import Any, Literal, Tuple, TypeAlias
@@ -9,15 +10,16 @@ from more_itertools import strip, split_at, one
 import docx
 from simplify_docx import simplify
 
-Text: TypeAlias = str
-Table: TypeAlias = list[dict[str, Any]]
-TextOrTable: TypeAlias = Text | Table
-MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
-                               "header_marker", "end_marker",
-                               "ps_marker", "na_span_markers"]
-Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
-
 class BookLoader:
+
+    Text: TypeAlias = str
+    Table: TypeAlias = list[dict[str, Any]]
+    TextOrTable: TypeAlias = Text | Table
+    Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
+
+    MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
+                                   "header_marker", "end_marker",
+                                   "ps_marker", "na_span_markers"]
 
     start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) /$")
@@ -48,11 +50,13 @@ class BookLoader:
 
         current_chapter = 0
 
-        def indexer(paragraph: TextOrTable) -> int:
+        def indexer(paragraph):
+
             nonlocal current_chapter
-            if isinstance(paragraph, Text):
+            if isinstance(paragraph, str):
                 if found_chapter := self.chapter_marker.search(paragraph):
                     current_chapter = int(found_chapter.group(1)) # type: ignore[union-attr]
+
             return current_chapter
 
         return indexer
@@ -63,11 +67,10 @@ class BookLoader:
 
         def not_header(paragraph):
             nonlocal is_start
-            header_match = self.__class__.match(self.header_marker, paragraph)
+            header_match = self.match(self.header_marker, paragraph)
             if is_start and header_match:
                 is_start = False
                 return True
-
             return not header_match
 
         return not_header
@@ -78,7 +81,7 @@ class BookLoader:
                     groupby(self._paragraphs, self._chapter_indexer())]
 
         last_chapter, separator, post_scriptum = split_at(
-            chapters[-1], lambda _p: self.__class__.match(self.ps_marker, _p),
+            chapters[-1], lambda _p: self.match(self.ps_marker, _p),
             maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
         chapters.extend([separator + post_scriptum])
@@ -87,35 +90,33 @@ class BookLoader:
 
     def _seeking_bounds(self, paragraph: TextOrTable) -> bool:
 
-        return (not self.__class__.match(self.start_marker, paragraph)
-                and not self.__class__.match(self.end_marker, paragraph))
+        return (not self.match(self.start_marker, paragraph)
+                and not self.match(self.end_marker, paragraph))
 
     def _spans_validator(self) -> Callable[[TextOrTable], bool]:
 
         valid = True
 
         def validator(paragraph):
+
             nonlocal valid
-            if isinstance(paragraph, Text):
+            if isinstance(paragraph, str):
                 bound_markers = self.na_span_markers[1 - valid]
                 if any(map(lambda pat: pat.match(paragraph), bound_markers)):
                     valid = not valid
-
             return valid
 
         return validator
 
-    def _etl_paragraphs(self, data_path: Path) -> Iterator[TextOrTable]:
+    def _etl_paragraphs(self, data_path: Path) -> Iterator[str]:
+        # TODO: Now it's just -> Iterator[str] (same everywhere else)
 
-        paragraphs = self.__class__.extract_paragraphs(data_path)
-        bounded_doc = strip(paragraphs, self._seeking_bounds)
+        paragraphs = self.extract_paragraphs(data_path)
+        tabless_paragraphs = map(self.tables_to_text, paragraphs)
+        bounded_doc = strip(tabless_paragraphs, self._seeking_bounds)
         headless_paragraphs = filter(self._is_not_header(), bounded_doc)
         valid_paragraphs = filter(self._spans_validator(), headless_paragraphs)
-        clean_paragraphs = map(self.__class__.join_bisected_words, valid_paragraphs)
-
-        # TODO: Extract tables contents
-        # tables = filter(lambda p: not isinstance(p, str), clean_paragraphs)
-        # tables = list(tables)
+        clean_paragraphs = map(self.join_bisected_words, valid_paragraphs)
 
         return clean_paragraphs
 
@@ -123,6 +124,23 @@ class BookLoader:
     def match(marker: re.Pattern[str], paragraph: TextOrTable) -> bool:
 
         return isinstance(paragraph, str) and bool(marker.match(paragraph))
+
+
+    @staticmethod
+    def tables_to_text(paragraph: TextOrTable) -> str:
+
+        if isinstance(paragraph, str):
+            return paragraph
+
+        assert all(e["TYPE"] == "table-row" for e in paragraph)
+        values_of = partial(map, itemgetter("VALUE"))
+
+        return ' '.join(
+            text
+            for row in values_of(paragraph)
+            for cell in values_of(row)
+            for content in values_of(cell)
+            for text in values_of(content))
 
     @staticmethod
     def join_bisected_words(paragraph: TextOrTable) -> TextOrTable:
