@@ -118,7 +118,7 @@ class BookLoader:
             return paragraph
 
         assert all(e["TYPE"] == "table-row" for e in paragraph)
-        values_of = partial(map, itemgetter("VALUE"))
+        values_of: Callable = partial(map, itemgetter("VALUE"))
 
         return ' '.join(
             text
