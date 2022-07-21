@@ -7,14 +7,15 @@ from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
 from more_itertools import one, split_at, strip
-from funcy import rcompose, iffy
+from funcy import rcompose, iffy, compact, without, rpartial, lremove
 import docx
 from simplify_docx import simplify
+
+values_of: Callable = partial(map, itemgetter("VALUE"))
 
 class BookLoader:
 
     Table: TypeAlias = list[dict[str, Any]]
-    TextOrTable: TypeAlias = str | Table
     MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                    "header_marker", "end_marker",
                                    "ps_marker", "na_span_markers"]
@@ -118,7 +119,6 @@ class BookLoader:
     def table_to_text(paragraph: Table) -> str:
 
         assert all(e["TYPE"] == "table-row" for e in paragraph)
-        values_of: Callable = partial(map, itemgetter("VALUE"))
 
         return ' '.join(
             text
@@ -132,31 +132,24 @@ class BookLoader:
 
         return re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", paragraph)
 
-    I: TypeAlias = Iterator[list[dict[str, TextOrTable]]]
     @staticmethod
-    def remove_empty_content(doc: I) -> I:
-
-        doc = filter(lambda p: p != "[w:sdt]", doc)
-        doc = map(lambda p: [u for u in p if u["TYPE"] != "CT_Empty"], doc)
-        doc = filter(bool, doc)
-
-        return doc
-
-    @staticmethod
-    def extract_paragraphs(data_path: Path) -> Iterator[TextOrTable]:
+    def extract_paragraphs(data_path: Path) -> Iterator[str]:
 
         assert data_path.exists()
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        doc_values = map(itemgetter("VALUE"), one(simple_docx["VALUE"])["VALUE"])
-        doc = BookLoader.remove_empty_content(doc_values)
-        paragraphs = map(iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                              action=lambda p: one(p)["VALUE"],
-                              default=BookLoader.table_to_text),
-                         doc)
 
-        return paragraphs
+        extract = rcompose(lambda doc: one(doc["VALUE"])["VALUE"],
+                           values_of,
+                           rpartial(without, "[w:sdt]"),
+                           partial(map, partial(lremove, lambda u: u["TYPE"] == "CT_Empty")),
+                           compact,
+                           partial(map, iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                                             action=lambda p: one(p)["VALUE"],
+                                             default=BookLoader.table_to_text)))
+
+        return extract(simple_docx)
 
 
 def get_args():
