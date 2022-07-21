@@ -6,14 +6,15 @@ from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
-import more_itertools as more_it
-from funcy import rcompose
+from more_itertools import one, split_at, strip
+from funcy import rcompose, iffy
 import docx
 from simplify_docx import simplify
 
 class BookLoader:
 
-    TextOrTable: TypeAlias = str | list[dict[str, Any]]
+    Table: TypeAlias = list[dict[str, Any]]
+    TextOrTable: TypeAlias = str | Table
     MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                    "header_marker", "end_marker",
                                    "ps_marker", "na_span_markers"]
@@ -77,7 +78,7 @@ class BookLoader:
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        last_chapter, separator, post_scriptum = more_it.split_at(
+        last_chapter, separator, post_scriptum = split_at(
             chapters[-1], self.ps_marker.match, maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
         chapters.extend([separator + post_scriptum])
@@ -106,8 +107,7 @@ class BookLoader:
     def _etl_paragraphs(self, data_path: Path) -> Iterator[str]:
 
         transform = rcompose(
-            partial(map, self.tables_to_text),
-            partial(more_it.strip, pred=self._seeking_bounds),
+            partial(strip, pred=self._seeking_bounds),
             partial(filter, self._is_not_header()),
             partial(filter, self._spans_validator()),
             partial(map, self.join_bisected_words))
@@ -115,10 +115,7 @@ class BookLoader:
         return transform(self.extract_paragraphs(data_path))
 
     @staticmethod
-    def tables_to_text(paragraph: TextOrTable) -> str:
-
-        if isinstance(paragraph, str):
-            return paragraph
+    def table_to_text(paragraph: Table) -> str:
 
         assert all(e["TYPE"] == "table-row" for e in paragraph)
         values_of: Callable = partial(map, itemgetter("VALUE"))
@@ -152,9 +149,12 @@ class BookLoader:
         simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        doc_values = map(itemgetter("VALUE"), simple_docx["VALUE"][0]["VALUE"])
+        doc_values = map(itemgetter("VALUE"), one(simple_docx["VALUE"])["VALUE"])
         doc = BookLoader.remove_empty_content(doc_values)
-        paragraphs = map(lambda p: more_it.one(p)["VALUE"] if p[0]["TYPE"] == "text" else p, doc)
+        paragraphs = map(iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                              action=lambda p: one(p)["VALUE"],
+                              default=BookLoader.table_to_text),
+                         doc)
 
         return paragraphs
 
@@ -173,7 +173,7 @@ def main(args) -> None:
 
     data_path = Path(args.data_fp).expanduser().resolve()
     book = BookLoader(data_path)
-    assert print([len(c) for c in book.chapters] == [43, 135, 193, 177, 344, 347, 31])
+    assert [len(c) for c in book.chapters] == [43, 135, 193, 177, 344, 347, 31]
 
 
 if __name__ == "__main__":
