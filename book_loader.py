@@ -6,18 +6,18 @@ from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
-from more_itertools import strip, split_at, one
+import more_itertools as more_it
+from funcy import rcompose
 import docx
 from simplify_docx import simplify
 
 class BookLoader:
 
     TextOrTable: TypeAlias = str | list[dict[str, Any]]
-    Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
-
     MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                    "header_marker", "end_marker",
                                    "ps_marker", "na_span_markers"]
+    Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
     start_marker = re.compile(r"^Introduction$")
     chapter_marker = re.compile(r"^Chapitre (\d+) /$")
@@ -52,6 +52,7 @@ class BookLoader:
             nonlocal current_chapter
             if found_chapter := self.chapter_marker.search(paragraph):
                 current_chapter = int(found_chapter.group(1)) # type: ignore[union-attr]
+
             return current_chapter
 
         return indexer
@@ -66,6 +67,7 @@ class BookLoader:
             if is_start and header_match:
                 is_start = False
                 return True
+
             return not header_match
 
         return not_header
@@ -75,7 +77,7 @@ class BookLoader:
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        last_chapter, separator, post_scriptum = split_at(
+        last_chapter, separator, post_scriptum = more_it.split_at(
             chapters[-1], self.ps_marker.match, maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
         chapters.extend([separator + post_scriptum])
@@ -96,20 +98,21 @@ class BookLoader:
             bound_markers = self.na_span_markers[1 - valid]
             if any(map(lambda pat: pat.match(paragraph), bound_markers)):
                 valid = not valid
+
             return valid
 
         return validator
 
     def _etl_paragraphs(self, data_path: Path) -> Iterator[str]:
 
-        paragraphs = self.extract_paragraphs(data_path)
-        tabless_paragraphs = map(self.tables_to_text, paragraphs)
-        bounded_doc = strip(tabless_paragraphs, self._seeking_bounds)
-        headless_paragraphs = filter(self._is_not_header(), bounded_doc)
-        valid_paragraphs = filter(self._spans_validator(), headless_paragraphs)
-        clean_paragraphs = map(self.join_bisected_words, valid_paragraphs)
+        transform = rcompose(
+            partial(map, self.tables_to_text),
+            partial(more_it.strip, pred=self._seeking_bounds),
+            partial(filter, self._is_not_header()),
+            partial(filter, self._spans_validator()),
+            partial(map, self.join_bisected_words))
 
-        return clean_paragraphs
+        return transform(self.extract_paragraphs(data_path))
 
     @staticmethod
     def tables_to_text(paragraph: TextOrTable) -> str:
@@ -151,7 +154,7 @@ class BookLoader:
                                 "include-paragraph-numbering": False})
         doc_values = map(itemgetter("VALUE"), simple_docx["VALUE"][0]["VALUE"])
         doc = BookLoader.remove_empty_content(doc_values)
-        paragraphs = map(lambda p: one(p)["VALUE"] if p[0]["TYPE"] == "text" else p, doc)
+        paragraphs = map(lambda p: more_it.one(p)["VALUE"] if p[0]["TYPE"] == "text" else p, doc)
 
         return paragraphs
 
@@ -162,6 +165,7 @@ def get_args():
     arg_parser.add_argument('-f', "--data-fp", type=str,
                             default="data/D5627-Dolan.docx",
                             help=("Path to the docx file to summarize."))
+
     return arg_parser.parse_args()
 
 
@@ -169,7 +173,7 @@ def main(args) -> None:
 
     data_path = Path(args.data_fp).expanduser().resolve()
     book = BookLoader(data_path)
-    print(book.chapters[0])
+    assert print([len(c) for c in book.chapters] == [43, 135, 193, 177, 344, 347, 31])
 
 
 if __name__ == "__main__":
