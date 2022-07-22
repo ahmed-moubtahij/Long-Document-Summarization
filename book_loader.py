@@ -23,7 +23,9 @@ class BookLoader:
                                    "ps_marker", "na_span_markers"]
     Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
-    # TODO: Provide an alternative ctor where `re.Pattern[str]` in `Marker` is just `str`
+    bisected_words = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
+
+    # TODO: Provide an ALTERNATIVE CTOR where `re.Pattern[str]` in `Marker` is just `str`
     # and use fy.walk_values(re.compile)
     def __init__(self, data_path: Path, markers: dict[MarkerKey, Marker]):
 
@@ -65,7 +67,8 @@ class BookLoader:
                     groupby(self._paragraphs, self._chapter_indexer())]
 
         last_chapter, separator, post_scriptum = mit.split_at(
-            chapters[-1], self.ps_marker.match, maxsplit=1, keep_separator=True)
+            chapters[-1], pred=self.ps_marker.match,
+            maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
         chapters.extend([separator + post_scriptum])
 
@@ -98,27 +101,21 @@ class BookLoader:
             partial(mit.strip, pred=self._seeking_bounds),
             partial(filter, self._is_not_header()),
             partial(filter, self._spans_validator()),
-            partial(map, self.join_bisected_words))
+            partial(map, partial(self.bisected_words.sub, r"\1\2")))
 
         return transform(paragraphs)
 
-    Table: TypeAlias = list[dict[str, Any]]
     @staticmethod
-    def table_to_text(paragraph: Table) -> str:
+    def table_to_text(table: list[dict[str, Any]]) -> str:
 
-        assert all(e["TYPE"] == "table-row" for e in paragraph)
+        assert all(e["TYPE"] == "table-row" for e in table)
 
         return ' '.join(
             text
-            for row in values_of(paragraph)
+            for row in values_of(table)
             for cell in values_of(row)
             for content in values_of(cell)
             for text in values_of(content))
-
-    @staticmethod
-    def join_bisected_words(paragraph: str) -> str:
-
-        return re.sub(r"([A-Za-z]+)-\s([A-Za-z]+)", r"\1\2", paragraph)
 
     @staticmethod
     def extract_paragraphs(data_path: Path) -> Iterator[str]:
