@@ -1,49 +1,34 @@
+# type: ignore[attr-defined]
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from functools import partial
-from operator import itemgetter
 from pathlib import Path
 from typing import Any, Literal, Tuple, TypeAlias
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
-from more_itertools import one, split_at, strip
-from funcy import rcompose, iffy, compact, without, rpartial, lremove
+import more_itertools as mit
+import funcy as fy
 import docx
 from simplify_docx import simplify
 
-values_of: Callable = partial(map, itemgetter("VALUE"))
 
+values_of: Callable = partial(fy.pluck, "VALUE")
+exactly_one: Callable = mit.one
+
+# pylint: disable=no-member
 class BookLoader:
 
-    Table: TypeAlias = list[dict[str, Any]]
     MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
                                    "header_marker", "end_marker",
                                    "ps_marker", "na_span_markers"]
     Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
 
-    start_marker = re.compile(r"^Introduction$")
-    chapter_marker = re.compile(r"^Chapitre (\d+) /$")
-    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
-                               rf"|{start_marker.pattern}"
-                               rf"|^Stress, santé et performance au travail$)")
-    end_marker = re.compile(r"^Annexe /$")
-    ps_marker = re.compile(r"^Conclusion$")
-    na_span_markers = (
-        [re.compile(r"^exerCiCe \d\.\d /$")],
-        [chapter_marker,
-         re.compile(r"^Les caractéristiques personnelles\."),
-         re.compile(r"/\tLocus de contrôle$"),
-         re.compile(r"^L'observation de sujets a amené Rotter"),
-         re.compile(r"^Lorsqu'une personne souffre de stress")])
-
-    def __init__(self, data_path: Path,
-                 markers: dict[MarkerKey, Marker] | None=None):
+    # TODO: Provide an alternative ctor where `re.Pattern[str]` in `Marker` is just `str`
+    # and use fy.walk_values(re.compile)
+    def __init__(self, data_path: Path, markers: dict[MarkerKey, Marker]):
 
         self._paragraphs = self._etl_paragraphs(data_path)
-
-        if markers is not None:
-            self.__dict__.update(markers) # type: ignore[arg-type]
-
+        self.__dict__.update(markers) # type: ignore[arg-type]
         self.chapters = self._segment_chapters()
 
     def _chapter_indexer(self) -> Callable[[str], int]:
@@ -79,7 +64,7 @@ class BookLoader:
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
-        last_chapter, separator, post_scriptum = split_at(
+        last_chapter, separator, post_scriptum = mit.split_at(
             chapters[-1], self.ps_marker.match, maxsplit=1, keep_separator=True)
         chapters[-1] = last_chapter
         chapters.extend([separator + post_scriptum])
@@ -107,14 +92,17 @@ class BookLoader:
 
     def _etl_paragraphs(self, data_path: Path) -> Iterator[str]:
 
-        transform = rcompose(
-            partial(strip, pred=self._seeking_bounds),
+        paragraphs = self.extract_paragraphs(data_path)
+
+        transform = fy.rcompose(
+            partial(mit.strip, pred=self._seeking_bounds),
             partial(filter, self._is_not_header()),
             partial(filter, self._spans_validator()),
             partial(map, self.join_bisected_words))
 
-        return transform(self.extract_paragraphs(data_path))
+        return transform(paragraphs)
 
+    Table: TypeAlias = list[dict[str, Any]]
     @staticmethod
     def table_to_text(paragraph: Table) -> str:
 
@@ -136,18 +124,19 @@ class BookLoader:
     def extract_paragraphs(data_path: Path) -> Iterator[str]:
 
         assert data_path.exists()
-        simple_docx = simplify(docx.Document(data_path),
+        _simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
+        simple_docx = exactly_one(_simple_docx["VALUE"])["VALUE"]
 
-        extract = rcompose(lambda doc: one(doc["VALUE"])["VALUE"],
-                           values_of,
-                           rpartial(without, "[w:sdt]"),
-                           partial(map, partial(lremove, lambda u: u["TYPE"] == "CT_Empty")),
-                           compact,
-                           partial(map, iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                                             action=lambda p: one(p)["VALUE"],
-                                             default=BookLoader.table_to_text)))
+        extract = fy.rcompose(
+            values_of,
+            fy.rpartial(fy.without, "[w:sdt]"),
+            partial(map, partial(fy.lremove, lambda u: u["TYPE"] == "CT_Empty")),
+            fy.compact,
+            partial(map, fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                                 action=lambda p: exactly_one(p)["VALUE"],
+                                 default=BookLoader.table_to_text)))
 
         return extract(simple_docx)
 
@@ -165,7 +154,31 @@ def get_args():
 def main(args) -> None:
 
     data_path = Path(args.data_fp).expanduser().resolve()
-    book = BookLoader(data_path)
+
+    start_marker = re.compile(r"^Introduction$")
+    chapter_marker = re.compile(r"^Chapitre (\d+) /$")
+    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
+                               rf"|{start_marker.pattern}"
+                               rf"|^Stress, santé et performance au travail$)")
+    end_marker = re.compile(r"^Annexe /$")
+    ps_marker = re.compile(r"^Conclusion$")
+    na_span_markers = (
+        [re.compile(r"^exerCiCe \d\.\d /$")],
+        [chapter_marker,
+         re.compile(r"^Les caractéristiques personnelles\."),
+         re.compile(r"/\tLocus de contrôle$"),
+         re.compile(r"^L'observation de sujets a amené Rotter"),
+         re.compile(r"^Lorsqu'une personne souffre de stress")])
+
+    book = BookLoader(data_path, markers={
+        "start_marker": start_marker,
+        "chapter_marker": chapter_marker,
+        "header_marker": header_marker,
+        "end_marker": end_marker,
+        "ps_marker": ps_marker,
+        "na_span_markers": na_span_markers
+    })
+
     assert [len(c) for c in book.chapters] == [43, 135, 193, 177, 344, 347, 31]
 
 
