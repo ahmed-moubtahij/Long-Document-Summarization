@@ -14,8 +14,6 @@ values_of: Callable = partial(fy.pluck, "VALUE")
 exactly_one: Callable = mit.one
 
 Pattern: TypeAlias = re.Pattern[str]
-PatternsPair: TypeAlias = tuple[list[Pattern], list[Pattern]]
-StrsPair: TypeAlias = tuple[list[str], list[str]]
 
 class Markers(TypedDict):
     start_marker: str | Pattern
@@ -23,7 +21,7 @@ class Markers(TypedDict):
     chapter_marker: str | Pattern
     header_marker: str | Pattern
     ps_marker: str | Pattern
-    na_span_markers: PatternsPair | StrsPair
+    na_span_markers: tuple[str | Pattern, str | Pattern]
 
 class BookLoader:
     start_marker: Pattern
@@ -31,7 +29,7 @@ class BookLoader:
     chapter_marker: Pattern
     header_marker: Pattern
     ps_marker: Pattern
-    na_span_markers: PatternsPair
+    na_span_markers: tuple[Pattern, Pattern]
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
 
@@ -42,7 +40,7 @@ class BookLoader:
         _markers = fy.omit(markers, "na_span_markers")
         compiled_markers = fy.walk_values(re.compile, _markers)
         compiled_markers["na_span_markers"] = tuple(
-            [re.compile(m) for m in span] for span in markers["na_span_markers"])
+            re.compile(m) for m in markers["na_span_markers"])
         self.__dict__.update(compiled_markers)
 
         self._paragraphs = self._etl_paragraphs(data_path)
@@ -101,7 +99,8 @@ class BookLoader:
         def validator(paragraph):
             nonlocal valid
             bound_markers = self.na_span_markers[1 - valid]
-            if any(map(lambda pat: pat.match(paragraph), bound_markers)):
+            if bound_markers.match(paragraph):
+            # if any(map(lambda pat: pat.match(paragraph), bound_markers)):
                 valid = not valid
 
             return valid
@@ -172,12 +171,12 @@ def main(args) -> None:
                                rf"|^Stress, santé et performance au travail$)")
     chapter_marker = r"^Chapitre (\d+) /$"
     na_span_markers = (
-            [r"^exerCiCe \d\.\d /$"],
-            [chapter_marker,
-             r"^Les caractéristiques personnelles\.",
-             r"/\tLocus de contrôle$",
-             r"^L'observation de sujets a amené Rotter",
-             r"^Lorsqu'une personne souffre de stress"])
+            r"^exerCiCe \d\.\d /$",
+            '|'.join([chapter_marker,
+                      r"^Les caractéristiques personnelles\.",
+                      r"/\tLocus de contrôle$",
+                      r"^L'observation de sujets a amené Rotter",
+                      r"^Lorsqu'une personne souffre de stress"]))
 
     book = BookLoader(data_path,
                       {"start_marker": start_marker,
