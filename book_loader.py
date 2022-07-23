@@ -1,8 +1,7 @@
-# type: ignore[attr-defined]
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal, Tuple, TypeAlias
+from typing import Any, TypeAlias, TypedDict
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
@@ -11,26 +10,42 @@ import funcy as fy
 import docx
 from simplify_docx import simplify
 
-
 values_of: Callable = partial(fy.pluck, "VALUE")
 exactly_one: Callable = mit.one
 
-# pylint: disable=no-member
+Pattern: TypeAlias = re.Pattern[str]
+PatternsPair: TypeAlias = tuple[list[Pattern], list[Pattern]]
+StrsPair: TypeAlias = tuple[list[str], list[str]]
+
+class Markers(TypedDict):
+    start_marker: str | Pattern
+    end_marker: str | Pattern
+    chapter_marker: str | Pattern
+    header_marker: str | Pattern
+    ps_marker: str | Pattern
+    na_span_markers: PatternsPair | StrsPair
+
 class BookLoader:
+    start_marker: Pattern
+    end_marker: Pattern
+    chapter_marker: Pattern
+    header_marker: Pattern
+    ps_marker: Pattern
+    na_span_markers: PatternsPair
 
-    MarkerKey: TypeAlias = Literal["start_marker", "chapter_marker",
-                                   "header_marker", "end_marker",
-                                   "ps_marker", "na_span_markers"]
-    Marker: TypeAlias = re.Pattern[str] | Tuple[list[re.Pattern[str]], list[re.Pattern[str]]]
+    word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
 
-    bisected_words = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
+    def __init__(self, data_path: Path, markers: Markers):
 
-    # TODO: Provide an ALTERNATIVE CTOR where `re.Pattern[str]` in `Marker` is just `str`
-    # and use fy.walk_values(re.compile)
-    def __init__(self, data_path: Path, markers: dict[MarkerKey, Marker]):
+        assert data_path.exists()
+
+        _markers = fy.omit(markers, "na_span_markers")
+        compiled_markers = fy.walk_values(re.compile, _markers)
+        compiled_markers["na_span_markers"] = tuple(
+            [re.compile(m) for m in span] for span in markers["na_span_markers"])
+        self.__dict__.update(compiled_markers)
 
         self._paragraphs = self._etl_paragraphs(data_path)
-        self.__dict__.update(markers) # type: ignore[arg-type]
         self.chapters = self._segment_chapters()
 
     def _chapter_indexer(self) -> Callable[[str], int]:
@@ -40,7 +55,7 @@ class BookLoader:
         def indexer(paragraph):
             nonlocal current_chapter
             if found_chapter := self.chapter_marker.search(paragraph):
-                current_chapter = int(found_chapter.group(1)) # type: ignore[union-attr]
+                current_chapter = int(found_chapter.group(1))
 
             return current_chapter
 
@@ -101,26 +116,13 @@ class BookLoader:
             partial(mit.strip, pred=self._seeking_bounds),
             partial(filter, self._is_not_header()),
             partial(filter, self._spans_validator()),
-            partial(map, partial(self.bisected_words.sub, r"\1\2")))
+            partial(map, partial(self.word_bisection.sub, r"\1\2")))
 
         return transform(paragraphs)
 
     @staticmethod
-    def table_to_text(table: list[dict[str, Any]]) -> str:
-
-        assert all(e["TYPE"] == "table-row" for e in table)
-
-        return ' '.join(
-            text
-            for row in values_of(table)
-            for cell in values_of(row)
-            for content in values_of(cell)
-            for text in values_of(content))
-
-    @staticmethod
     def extract_paragraphs(data_path: Path) -> Iterator[str]:
 
-        assert data_path.exists()
         _simple_docx = simplify(docx.Document(data_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
@@ -137,6 +139,18 @@ class BookLoader:
 
         return extract(simple_docx)
 
+    @staticmethod
+    def table_to_text(table: list[dict[str, Any]]) -> str:
+
+        assert all(e["TYPE"] == "table-row" for e in table)
+
+        return ' '.join(
+            text
+            for row in values_of(table)
+            for cell in values_of(row)
+            for content in values_of(cell)
+            for text in values_of(content))
+
 
 def get_args():
 
@@ -152,32 +166,31 @@ def main(args) -> None:
 
     data_path = Path(args.data_fp).expanduser().resolve()
 
-    start_marker = re.compile(r"^Introduction$")
-    chapter_marker = re.compile(r"^Chapitre (\d+) /$")
-    header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
-                               rf"|{start_marker.pattern}"
+    start_marker = r"^Introduction$"
+    compiled_header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
+                               rf"|{start_marker}"
                                rf"|^Stress, santé et performance au travail$)")
-    end_marker = re.compile(r"^Annexe /$")
-    ps_marker = re.compile(r"^Conclusion$")
+    compiled_end_marker = re.compile(r"^Annexe /$")
+    compiled_ps_marker = re.compile(r"^Conclusion$")
+    chapter_marker = r"^Chapitre (\d+) /$"
     na_span_markers = (
-        [re.compile(r"^exerCiCe \d\.\d /$")],
-        [chapter_marker,
-         re.compile(r"^Les caractéristiques personnelles\."),
-         re.compile(r"/\tLocus de contrôle$"),
-         re.compile(r"^L'observation de sujets a amené Rotter"),
-         re.compile(r"^Lorsqu'une personne souffre de stress")])
+            [r"^exerCiCe \d\.\d /$"],
+            [chapter_marker,
+             r"^Les caractéristiques personnelles\.",
+             r"/\tLocus de contrôle$",
+             r"^L'observation de sujets a amené Rotter",
+             r"^Lorsqu'une personne souffre de stress"])
 
-    book = BookLoader(data_path, markers={
-        "start_marker": start_marker,
-        "chapter_marker": chapter_marker,
-        "header_marker": header_marker,
-        "end_marker": end_marker,
-        "ps_marker": ps_marker,
-        "na_span_markers": na_span_markers
-    })
+    book = BookLoader(data_path,
+                      {"start_marker": start_marker,
+                       "end_marker": compiled_end_marker,
+                       "chapter_marker": chapter_marker,
+                       "header_marker": compiled_header_marker,
+                       "ps_marker": compiled_ps_marker,
+                       "na_span_markers": na_span_markers})
 
-    assert [len(c) for c in book.chapters] == [43, 135, 193, 177, 344, 347, 31]
-
+    expected_lengths = [43, 135, 193, 177, 344, 347, 31]
+    assert [len(c) for c in book.chapters] == expected_lengths
 
 if __name__ == "__main__":
     main(get_args())
