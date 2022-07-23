@@ -170,8 +170,6 @@ def main(args) -> None:
     compiled_header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
                                rf"|{start_marker}"
                                rf"|^Stress, santé et performance au travail$)")
-    compiled_end_marker = re.compile(r"^Annexe /$")
-    compiled_ps_marker = re.compile(r"^Conclusion$")
     chapter_marker = r"^Chapitre (\d+) /$"
     na_span_markers = (
             [r"^exerCiCe \d\.\d /$"],
@@ -183,10 +181,10 @@ def main(args) -> None:
 
     book = BookLoader(data_path,
                       {"start_marker": start_marker,
-                       "end_marker": compiled_end_marker,
+                       "end_marker": re.compile(r"^Annexe /$"),
                        "chapter_marker": chapter_marker,
                        "header_marker": compiled_header_marker,
-                       "ps_marker": compiled_ps_marker,
+                       "ps_marker": re.compile(r"^Conclusion$"),
                        "na_span_markers": na_span_markers})
 
     expected_lengths = [43, 135, 193, 177, 344, 347, 31]
