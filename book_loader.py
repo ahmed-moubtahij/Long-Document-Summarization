@@ -98,9 +98,8 @@ class BookLoader:
 
         def validator(paragraph):
             nonlocal valid
-            bound_markers = self.na_span_markers[1 - valid]
-            if bound_markers.match(paragraph):
-            # if any(map(lambda pat: pat.match(paragraph), bound_markers)):
+            bound_marker = self.na_span_markers[1 - valid]
+            if bound_marker.match(paragraph):
                 valid = not valid
 
             return valid
