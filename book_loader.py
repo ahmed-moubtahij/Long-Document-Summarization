@@ -33,9 +33,9 @@ class BookLoader:
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
 
-    def __init__(self, data_path: Path, markers: Markers):
+    def __init__(self, doc_path: Path, markers: Markers):
 
-        assert data_path.exists()
+        assert doc_path.exists()
 
         _markers = fy.omit(markers, "na_span_markers")
         compiled_markers = fy.walk_values(re.compile, _markers)
@@ -43,7 +43,7 @@ class BookLoader:
             re.compile(m) for m in markers["na_span_markers"])
         self.__dict__.update(compiled_markers)
 
-        self._paragraphs = self._etl_paragraphs(data_path)
+        self._paragraphs = self._etl_paragraphs(doc_path)
         self.chapters = self._segment_chapters()
 
     def _chapter_indexer(self) -> Callable[[str], int]:
@@ -52,8 +52,7 @@ class BookLoader:
 
         def indexer(paragraph):
             nonlocal current_chapter
-            if found_chapter := self.chapter_marker.search(paragraph):
-                current_chapter = int(found_chapter.group(1))
+            current_chapter += bool(self.chapter_marker.match(paragraph))
 
             return current_chapter
 
@@ -106,9 +105,9 @@ class BookLoader:
 
         return validator
 
-    def _etl_paragraphs(self, data_path: Path) -> Iterator[str]:
+    def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
 
-        paragraphs = self.extract_paragraphs(data_path)
+        paragraphs = self.extract_paragraphs(doc_path)
 
         transform = fy.rcompose(
             partial(mit.strip, pred=self._seeking_bounds),
@@ -119,9 +118,9 @@ class BookLoader:
         return transform(paragraphs)
 
     @staticmethod
-    def extract_paragraphs(data_path: Path) -> Iterator[str]:
+    def extract_paragraphs(doc_path: Path) -> Iterator[str]:
 
-        _simple_docx = simplify(docx.Document(data_path),
+        _simple_docx = simplify(docx.Document(doc_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
         simple_docx = exactly_one(_simple_docx["VALUE"])["VALUE"]
@@ -162,12 +161,14 @@ def get_args():
 
 def main(args) -> None:
 
-    data_path = Path(args.data_fp).expanduser().resolve()
+    doc_path = Path(args.data_fp).expanduser().resolve()
 
     start_marker = r"^Introduction$"
+    end_marker = re.compile(r"^Annexe /$")
     compiled_header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
                                rf"|{start_marker}"
                                rf"|^Stress, santé et performance au travail$)")
+    ps_marker = re.compile(r"^Conclusion$")
     chapter_marker = r"^Chapitre (\d+) /$"
     na_span_markers = (
             r"^exerCiCe \d\.\d /$",
@@ -177,12 +178,12 @@ def main(args) -> None:
                       r"^L'observation de sujets a amené Rotter",
                       r"^Lorsqu'une personne souffre de stress"]))
 
-    book = BookLoader(data_path,
+    book = BookLoader(doc_path,
                       {"start_marker": start_marker,
-                       "end_marker": re.compile(r"^Annexe /$"),
+                       "end_marker": end_marker,
                        "chapter_marker": chapter_marker,
                        "header_marker": compiled_header_marker,
-                       "ps_marker": re.compile(r"^Conclusion$"),
+                       "ps_marker": ps_marker,
                        "na_span_markers": na_span_markers})
 
     expected_lengths = [43, 135, 193, 177, 344, 347, 31]
