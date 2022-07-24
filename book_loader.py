@@ -53,7 +53,6 @@ class BookLoader:
         def indexer(paragraph):
             nonlocal current_chapter
             current_chapter += bool(self.chapter_marker.match(paragraph))
-
             return current_chapter
 
         return indexer
@@ -107,15 +106,14 @@ class BookLoader:
 
     def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
 
-        paragraphs = self.extract_paragraphs(doc_path)
-
-        transform = fy.rcompose(
+        process = fy.rcompose(
+            self.extract_paragraphs,
             partial(mit.strip, pred=self._seeking_bounds),
             partial(filter, self._is_not_header()),
             partial(filter, self._spans_validator()),
             partial(map, partial(self.word_bisection.sub, r"\1\2")))
 
-        return transform(paragraphs)
+        return process(doc_path)
 
     @staticmethod
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
@@ -169,7 +167,7 @@ def main(args) -> None:
                                rf"|{start_marker}"
                                rf"|^Stress, santé et performance au travail$)")
     ps_marker = re.compile(r"^Conclusion$")
-    chapter_marker = r"^Chapitre (\d+) /$"
+    chapter_marker = r"^Chapitre \d+ /$"
     na_span_markers = (
             r"^exerCiCe \d\.\d /$",
             '|'.join([chapter_marker,
