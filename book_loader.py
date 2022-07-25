@@ -1,14 +1,29 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from functools import partial
 from pathlib import Path
-from typing import Any, TypeAlias, TypedDict
-from collections.abc import Iterator, Callable
+from typing import Any, TypeAlias, TypeVar, TypedDict
+from collections.abc import Iterator, Iterable, Callable
 import re
 from itertools import groupby
 import more_itertools as mit
 import funcy as fy
 import docx
 from simplify_docx import simplify
+
+T = TypeVar('T')
+def unique_if(pred: Callable[[T], Any]) -> Callable[[Iterable[T]], Iterator[T]]:
+
+    def _unique_if(iterable):
+        seen = []
+        for item in iterable:
+            if pred(item):
+                if not item in seen:
+                    seen.append(item)
+                    yield item
+            else:
+                yield item
+
+    return _unique_if
 
 map_: Callable = fy.curry(map)
 filter_: Callable = fy.curry(filter)
@@ -59,26 +74,12 @@ class BookLoader:
 
         return indexer
 
-    def _is_not_header(self) -> Callable[[str], bool]:
-
-        is_start = True
-
-        def not_header(paragraph):
-            nonlocal is_start
-            header_match = self.header_marker.match(paragraph)
-            if is_start and header_match:
-                is_start = False
-                return True
-
-            return not header_match
-
-        return not_header
-
     def _segment_chapters(self) -> list[list[str]]:
 
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
 
+        # TODO: Is there a way to avoid this with the new unique-ing of headers?
         last_chapter, separator, post_scriptum = mit.split_at(
             chapters[-1], pred=self.ps_marker.match,
             maxsplit=1, keep_separator=True)
@@ -105,36 +106,17 @@ class BookLoader:
 
         return validator
 
-    # TODO: Investigate uniqu'ing paragraphs (with fy.distinct)
-    # def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
-
-    #     paragraphs =  self.extract_paragraphs(doc_path)
-    #     # paragraphs = fy.ldistinct(paragraphs)
-    #     paragraphs = mit.unique_everseen(paragraphs)
-
-        # process = fy.rcompose(
-        #     self.extract_paragraphs,
-        #     # TODO: Why is it skipping to chapters 4 and 5?
-        #     partial(mit.strip, pred=self._seeking_bounds),
-        #     filter_(self._is_not_header()),
-        #     filter_(self._is_valid_span()),
-        #     map_(partial(self.word_bisection.sub, r"\1\2")))
-
-    #     res = process(paragraphs)
-    #     tmp = list(res)
-
-    #     return res
-
     def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
 
         process = fy.rcompose(
             self.extract_paragraphs,
             partial(mit.strip, pred=self._seeking_bounds),
-            filter_(self._is_not_header()),
+            unique_if(self.header_marker.match),
             filter_(self._is_valid_span()),
             map_(partial(self.word_bisection.sub, r"\1\2")))
 
         return process(doc_path)
+
 
     @staticmethod
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
@@ -184,10 +166,11 @@ def main(args) -> None:
 
     start_marker = r"^Introduction$"
     end_marker = re.compile(r"^Annexe /$")
-    compiled_header_marker = re.compile(rf"(?:^Chapitre \d+ /.+"
-                               rf"|{start_marker}"
-                               rf"|^Stress, santé et performance au travail$)")
-    ps_marker = re.compile(r"^Conclusion$")
+    compiled_header_marker = re.compile(
+        rf"^Chapitre \d+ /.+"
+        rf"|{start_marker}"
+        rf"|^Stress, santé et performance au travail$")
+    compiled_ps_marker = re.compile(r"^Conclusion$")
     chapter_marker = r"^Chapitre \d+ /$"
     na_span_markers = (
             r"^exerCiCe \d\.\d /$",
@@ -202,10 +185,10 @@ def main(args) -> None:
                        "end_marker": end_marker,
                        "chapter_marker": chapter_marker,
                        "header_marker": compiled_header_marker,
-                       "ps_marker": ps_marker,
+                       "ps_marker": compiled_ps_marker,
                        "na_span_markers": na_span_markers})
 
-    expected_lengths = [43, 135, 193, 177, 344, 347, 31]
+    expected_lengths = [44, 136, 194, 178, 345, 348, 31]
     assert [len(c) for c in book.chapters] == expected_lengths
 
 if __name__ == "__main__":
