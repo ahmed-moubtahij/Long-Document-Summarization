@@ -14,11 +14,11 @@ T = TypeVar('T')
 def unique_if(pred: Callable[[T], Any]) -> Callable[[Iterable[T]], Iterator[T]]:
 
     def _unique_if(iterable):
-        seen = []
+        seen = set()
         for item in iterable:
             if pred(item):
                 if not item in seen:
-                    seen.append(item)
+                    seen.add(item)
                     yield item
             else:
                 yield item
@@ -35,9 +35,9 @@ Pattern: TypeAlias = re.Pattern[str]
 class Markers(TypedDict):
     start_marker: str | Pattern
     end_marker: str | Pattern
+    # TODO: start_marker and end_marker should be a tuple[str | Pattern, str | Pattern] (and TypeAlias it)
     chapter_marker: str | Pattern
     header_marker: str | Pattern
-    ps_marker: str | Pattern
     na_span_markers: tuple[str | Pattern, str | Pattern]
 
 class BookLoader:
@@ -45,7 +45,6 @@ class BookLoader:
     end_marker: Pattern
     chapter_marker: Pattern
     header_marker: Pattern
-    ps_marker: Pattern
     na_span_markers: tuple[Pattern, Pattern]
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
@@ -78,13 +77,6 @@ class BookLoader:
 
         chapters = [list(paragraphs) for _, paragraphs in
                     groupby(self._paragraphs, self._chapter_indexer())]
-
-        # TODO: Is there a way to avoid this with the new unique-ing of headers?
-        last_chapter, separator, post_scriptum = mit.split_at(
-            chapters[-1], pred=self.ps_marker.match,
-            maxsplit=1, keep_separator=True)
-        chapters[-1] = last_chapter
-        chapters.extend([separator + post_scriptum])
 
         return chapters
 
@@ -165,13 +157,14 @@ def main(args) -> None:
     doc_path = Path(args.data_fp).expanduser().resolve()
 
     start_marker = r"^Introduction$"
-    end_marker = re.compile(r"^Annexe /$")
+    compiled_end_marker = re.compile(r"^Annexe /$")
+    conclusion_marker = r"^Conclusion$"
     compiled_header_marker = re.compile(
         rf"^Chapitre \d+ /.+"
         rf"|{start_marker}"
-        rf"|^Stress, santé et performance au travail$")
-    compiled_ps_marker = re.compile(r"^Conclusion$")
-    chapter_marker = r"^Chapitre \d+ /$"
+        rf"|^Stress, santé et performance au travail$"
+        rf"|{conclusion_marker}")
+    chapter_marker = rf"^Chapitre \d+ /$|{conclusion_marker}"
     na_span_markers = (
             r"^exerCiCe \d\.\d /$",
             '|'.join([chapter_marker,
@@ -182,13 +175,12 @@ def main(args) -> None:
 
     book = BookLoader(doc_path,
                       {"start_marker": start_marker,
-                       "end_marker": end_marker,
+                       "end_marker": compiled_end_marker,
                        "chapter_marker": chapter_marker,
                        "header_marker": compiled_header_marker,
-                       "ps_marker": compiled_ps_marker,
                        "na_span_markers": na_span_markers})
 
-    expected_lengths = [44, 136, 194, 178, 345, 348, 31]
+    expected_lengths = [44, 136, 194, 178, 345, 348, 29]
     assert [len(c) for c in book.chapters] == expected_lengths
 
 if __name__ == "__main__":
