@@ -31,21 +31,21 @@ exactly_one: Callable = mit.one
 values_of: Callable = partial(fy.pluck, "VALUE")
 
 Pattern: TypeAlias = re.Pattern[str]
+Marker: TypeAlias = Pattern | str
+MarkersPair: TypeAlias = tuple[str | Pattern, str | Pattern]
+PatternsPair: TypeAlias = tuple[Pattern, Pattern]
 
 class Markers(TypedDict):
-    start_marker: str | Pattern
-    end_marker: str | Pattern
-    # TODO: start_marker and end_marker should be a tuple[str | Pattern, str | Pattern] (and TypeAlias it)
-    chapter_marker: str | Pattern
-    header_marker: str | Pattern
-    na_span_markers: tuple[str | Pattern, str | Pattern]
+    slice_markers: MarkersPair
+    chapter_marker: Marker
+    header_marker: Marker
+    na_span_markers: MarkersPair
 
 class BookLoader:
-    start_marker: Pattern
-    end_marker: Pattern
+    slice_markers: PatternsPair
     chapter_marker: Pattern
     header_marker: Pattern
-    na_span_markers: tuple[Pattern, Pattern]
+    na_span_markers: PatternsPair
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
 
@@ -53,14 +53,17 @@ class BookLoader:
 
         assert doc_path.exists()
 
-        _markers = fy.omit(markers, "na_span_markers")
-        compiled_markers = fy.walk_values(re.compile, _markers)
-        compiled_markers["na_span_markers"] = tuple(
-            re.compile(m) for m in markers["na_span_markers"])
+        compiled_markers = fy.walk_values(
+            fy.iffy(fy.is_tuple,
+                    partial(fy.walk, re.compile),
+                    re.compile),
+            markers)
+
         self.__dict__.update(compiled_markers)
 
         self._paragraphs = self._etl_paragraphs(doc_path)
-        self.chapters = self._segment_chapters()
+        self.chapters = [list(paragraphs) for _, paragraphs in
+                         groupby(self._paragraphs, self._chapter_indexer())]
 
     def _chapter_indexer(self) -> Callable[[str], int]:
 
@@ -72,18 +75,6 @@ class BookLoader:
             return current_chapter
 
         return indexer
-
-    def _segment_chapters(self) -> list[list[str]]:
-
-        chapters = [list(paragraphs) for _, paragraphs in
-                    groupby(self._paragraphs, self._chapter_indexer())]
-
-        return chapters
-
-    def _seeking_bounds(self, paragraph: str) -> bool:
-
-        return (not self.start_marker.match(paragraph)
-                and not self.end_marker.match(paragraph))
 
     def _is_valid_span(self) -> Callable[[str], bool]:
 
@@ -102,7 +93,7 @@ class BookLoader:
 
         process = fy.rcompose(
             self.extract_paragraphs,
-            partial(mit.strip, pred=self._seeking_bounds),
+            partial(mit.strip, pred=fy.none_fn(*self.slice_markers)),
             unique_if(self.header_marker.match),
             filter_(self._is_valid_span()),
             map_(partial(self.word_bisection.sub, r"\1\2")))
@@ -124,8 +115,8 @@ class BookLoader:
             map_(partial(fy.lremove, lambda u: u["TYPE"] == "CT_Empty")),
             fy.compact,
             map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                           action=lambda p: exactly_one(p)["VALUE"],
-                           default=BookLoader.table_to_text)))
+                         action=lambda p: exactly_one(p)["VALUE"],
+                         default=BookLoader.table_to_text)))
 
         return extract(simple_docx)
 
@@ -157,7 +148,7 @@ def main(args) -> None:
     doc_path = Path(args.data_fp).expanduser().resolve()
 
     start_marker = r"^Introduction$"
-    compiled_end_marker = re.compile(r"^Annexe /$")
+    slice_markers = (start_marker, re.compile(r"^Annexe /$"))
     conclusion_marker = r"^Conclusion$"
     compiled_header_marker = re.compile(
         rf"^Chapitre \d+ /.+"
@@ -174,8 +165,7 @@ def main(args) -> None:
                       r"^Lorsqu'une personne souffre de stress"]))
 
     book = BookLoader(doc_path,
-                      {"start_marker": start_marker,
-                       "end_marker": compiled_end_marker,
+                      {"slice_markers": slice_markers,
                        "chapter_marker": chapter_marker,
                        "header_marker": compiled_header_marker,
                        "na_span_markers": na_span_markers})
