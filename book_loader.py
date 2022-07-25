@@ -10,8 +10,10 @@ import funcy as fy
 import docx
 from simplify_docx import simplify
 
-values_of: Callable = partial(fy.pluck, "VALUE")
+map_: Callable = fy.curry(map)
+filter_: Callable = fy.curry(filter)
 exactly_one: Callable = mit.one
+values_of: Callable = partial(fy.pluck, "VALUE")
 
 Pattern: TypeAlias = re.Pattern[str]
 
@@ -90,7 +92,7 @@ class BookLoader:
         return (not self.start_marker.match(paragraph)
                 and not self.end_marker.match(paragraph))
 
-    def _spans_validator(self) -> Callable[[str], bool]:
+    def _is_valid_span(self) -> Callable[[str], bool]:
 
         valid = True
 
@@ -99,19 +101,38 @@ class BookLoader:
             bound_marker = self.na_span_markers[1 - valid]
             if bound_marker.match(paragraph):
                 valid = not valid
-
             return valid
 
         return validator
+
+    # TODO: Investigate uniqu'ing paragraphs (with fy.distinct)
+    # def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
+
+    #     paragraphs =  self.extract_paragraphs(doc_path)
+    #     # paragraphs = fy.ldistinct(paragraphs)
+    #     paragraphs = mit.unique_everseen(paragraphs)
+
+        # process = fy.rcompose(
+        #     self.extract_paragraphs,
+        #     # TODO: Why is it skipping to chapters 4 and 5?
+        #     partial(mit.strip, pred=self._seeking_bounds),
+        #     filter_(self._is_not_header()),
+        #     filter_(self._is_valid_span()),
+        #     map_(partial(self.word_bisection.sub, r"\1\2")))
+
+    #     res = process(paragraphs)
+    #     tmp = list(res)
+
+    #     return res
 
     def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
 
         process = fy.rcompose(
             self.extract_paragraphs,
             partial(mit.strip, pred=self._seeking_bounds),
-            partial(filter, self._is_not_header()),
-            partial(filter, self._spans_validator()),
-            partial(map, partial(self.word_bisection.sub, r"\1\2")))
+            filter_(self._is_not_header()),
+            filter_(self._is_valid_span()),
+            map_(partial(self.word_bisection.sub, r"\1\2")))
 
         return process(doc_path)
 
@@ -126,11 +147,11 @@ class BookLoader:
         extract = fy.rcompose(
             values_of,
             fy.rpartial(fy.without, "[w:sdt]"),
-            partial(map, partial(fy.lremove, lambda u: u["TYPE"] == "CT_Empty")),
+            map_(partial(fy.lremove, lambda u: u["TYPE"] == "CT_Empty")),
             fy.compact,
-            partial(map, fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                                 action=lambda p: exactly_one(p)["VALUE"],
-                                 default=BookLoader.table_to_text)))
+            map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                           action=lambda p: exactly_one(p)["VALUE"],
+                           default=BookLoader.table_to_text)))
 
         return extract(simple_docx)
 
