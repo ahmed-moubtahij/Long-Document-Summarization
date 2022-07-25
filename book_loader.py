@@ -1,4 +1,3 @@
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from functools import partial
 from pathlib import Path
 from typing import Any, TypeAlias, TypedDict
@@ -116,19 +115,9 @@ class BookLoader:
             for text in values_of(content))
 
 
-def get_args():
+def main() -> None:
 
-    arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    arg_parser.add_argument('-f', "--data-fp", type=str,
-                            default="data/D5627-Dolan.docx",
-                            help=("Path to the docx file to summarize."))
-
-    return arg_parser.parse_args()
-
-
-def main(args) -> None:
-
-    doc_path = Path(args.data_fp).expanduser().resolve()
+    doc_path = Path("data/D5627-Dolan.docx").expanduser().resolve()
 
     start_marker = r"^Introduction$"
     slice_markers = (start_marker, re.compile(r"^Annexe /$"))
@@ -157,4 +146,4 @@ def main(args) -> None:
     assert [len(c) for c in book.chapters] == expected_lengths
 
 if __name__ == "__main__":
-    main(get_args())
+    main()
