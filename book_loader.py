@@ -1,33 +1,16 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from functools import partial
 from pathlib import Path
-from typing import Any, TypeAlias, TypeVar, TypedDict
-from collections.abc import Iterator, Iterable, Callable
+from typing import Any, TypeAlias, TypedDict
+from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
-import more_itertools as mit
+from more_itertools import strip
 import funcy as fy
 import docx
 from simplify_docx import simplify
+from my_utils import map_, filter_, exactly_one, unique_if
 
-T = TypeVar('T')
-def unique_if(pred: Callable[[T], Any]) -> Callable[[Iterable[T]], Iterator[T]]:
-
-    def _unique_if(iterable):
-        seen = set()
-        for item in iterable:
-            if pred(item):
-                if not item in seen:
-                    seen.add(item)
-                    yield item
-            else:
-                yield item
-
-    return _unique_if
-
-map_: Callable = fy.curry(map)
-filter_: Callable = fy.curry(filter)
-exactly_one: Callable = mit.one
 values_of: Callable = partial(fy.pluck, "VALUE")
 
 Pattern: TypeAlias = re.Pattern[str]
@@ -93,7 +76,7 @@ class BookLoader:
 
         process = fy.rcompose(
             self.extract_paragraphs,
-            partial(mit.strip, pred=fy.none_fn(*self.slice_markers)),
+            partial(strip, pred=fy.none_fn(*self.slice_markers)),
             unique_if(self.header_marker.match),
             filter_(self._is_valid_span()),
             map_(partial(self.word_bisection.sub, r"\1\2")))
