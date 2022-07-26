@@ -1,11 +1,11 @@
-from typing import TypeVar, Any
+from typing import TypeVar
 from collections.abc import Callable, Iterable, Iterator
 
 map_: Callable = lambda f: lambda iterable: map(f, iterable)
 filter_: Callable = lambda p: lambda iterable: filter(p, iterable)
 
 T = TypeVar('T')
-def unique_if(pred: Callable[[T], Any]) -> Callable[[Iterable[T]], Iterator[T]]:
+def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:
 
     def _unique_if(iterable):
         seen = set()
