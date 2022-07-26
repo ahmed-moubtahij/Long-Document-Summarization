@@ -36,9 +36,9 @@ class BookLoader:
         assert doc_path.exists()
 
         compiled_markers = fy.walk_values(
-            fy.iffy(fy.is_tuple,
-                    partial(fy.walk, re.compile),
-                    re.compile),
+            fy.iffy(pred=fy.is_tuple,
+                    action=partial(fy.walk, re.compile),
+                    default=re.compile),
             markers)
 
         self.__dict__.update(compiled_markers)
