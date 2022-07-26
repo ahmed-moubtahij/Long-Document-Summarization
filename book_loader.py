@@ -1,6 +1,6 @@
 from functools import partial
 from pathlib import Path
-from typing import Any, TypeAlias, TypedDict
+from typing import TypeAlias, TypedDict
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
@@ -94,7 +94,7 @@ class BookLoader:
         extract = fy.rcompose(
             values_of,
             fy.rpartial(fy.without, "[w:sdt]"),
-            map_(partial(fy.lremove, lambda u: u["TYPE"] == "CT_Empty")),
+            map_(partial(fy.lremove, lambda d: d["TYPE"] == "CT_Empty")),
             fy.compact,
             map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
                          action=lambda p: exactly_one(p)["VALUE"],
@@ -103,7 +103,7 @@ class BookLoader:
         return extract(simple_docx)
 
     @staticmethod
-    def table_to_text(table: list[dict[str, Any]]) -> str:
+    def table_to_text(table: list[dict[str, list[dict]]]) -> str:
 
         assert all(e["TYPE"] == "table-row" for e in table)
 
@@ -142,8 +142,9 @@ def main() -> None:
                        "header_marker": compiled_header_marker,
                        "na_span_markers": na_span_markers})
 
+    observed_lengths = [len(c) for c in book.chapters]
     expected_lengths = [44, 136, 194, 178, 345, 348, 29]
-    assert [len(c) for c in book.chapters] == expected_lengths
+    assert observed_lengths == expected_lengths
 
 if __name__ == "__main__":
     main()
