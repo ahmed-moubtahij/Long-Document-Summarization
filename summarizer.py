@@ -32,18 +32,20 @@ def generate_summary(text: str) -> str:
     return tokenizer.decode(output[0], skip_special_tokens=True)
 
 
-
-# Remove last sentence as the decoder tends to generate it incompletely
-def trim() -> Callable[[str], str]:
+def french_sentencizer() -> Callable[[str], list[str]]:
     nlp = French()
     nlp.add_pipe("sentencizer")
 
-    def trimmer(text: str):
+    def _sentencize(text):
         sents = map(str, nlp(text).sents)
-        all_sents_but_last = list(sents)[:-1]
-        return '\n'.join(all_sents_but_last)
+        return list(sents)
 
-    return trimmer
+    return _sentencize
+
+# Remove last sentence as the decoder tends to generate it incompletely
+def trim(text: str) -> str:
+    all_sents_but_last = french_sentencizer()(text)[:-1]
+    return '\n'.join(all_sents_but_last)
 
 def main() -> None:
 
@@ -51,6 +53,7 @@ def main() -> None:
 
     doc_path = Path("data/D5627-Dolan.docx").expanduser().resolve()
 
+    # TODO: Read markers from a config file
     start_marker = r"^Introduction$"
     slice_markers = (start_marker, re.compile(r"^Annexe /$"))
     conclusion_marker = r"^Conclusion$"
@@ -85,7 +88,7 @@ def main() -> None:
     chapters_to_summarize = ['\n'.join(p for p in chapter)
                              for chapter in book.chapters[1: -3]]
 
-    summaries = [trim()(generate_summary(chapter))
+    summaries = [trim(generate_summary(chapter))
                  for chapter in tqdm(chapters_to_summarize)]
 
     assert len(summaries) == len(references)
