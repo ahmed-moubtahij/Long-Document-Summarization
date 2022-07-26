@@ -4,7 +4,8 @@ from collections.abc import Callable
 import jsonlines as jsonl
 import torch
 from tqdm import tqdm
-from transformers import RobertaTokenizerFast, EncoderDecoderModel
+from transformers.models.encoder_decoder.modeling_encoder_decoder import EncoderDecoderModel
+from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
 from spacy.lang.fr import French
 from book_loader import BookLoader
 
@@ -94,10 +95,10 @@ def main() -> None:
         for idx, (summary, ref) in enumerate(zip(summaries, references))
     ]
 
-    out_path = Path("summaries.jsonl")
-    print(f"Generating & writing summaries to {out_path}\n")
+    out_path = Path("data/").expanduser().resolve()
+    assert out_path.exists()
 
-    with open(out_path, 'w', encoding='utf-8') as out_jsonl:
+    with open(out_path/"summaries.jsonl", 'w', encoding='utf-8') as out_jsonl:
         jsonl.Writer(out_jsonl).write_all(summary_units)
 
     with jsonl.open(out_path) as summarization_units:
