@@ -8,7 +8,7 @@ from more_itertools import strip
 import funcy as fy
 import docx
 from simplify_docx import simplify
-from my_utils import map_, filter_, exactly_one, unique_if
+import my_utils as ut
 
 values_of: Callable = partial(fy.pluck, "VALUE")
 
@@ -76,9 +76,9 @@ class BookLoader:
         process = fy.rcompose(
             self.extract_paragraphs,
             partial(strip, pred=fy.none_fn(*self.slice_markers)),
-            unique_if(self.header_marker.match),
-            filter_(self._is_valid_span()),
-            map_(partial(self.word_bisection.sub, r"\1\2")))
+            ut.unique_if(self.header_marker.match),
+            ut.filter_(self._is_valid_span()),
+            ut.map_(partial(self.word_bisection.sub, r"\1\2")))
 
         return process(doc_path)
 
@@ -89,16 +89,16 @@ class BookLoader:
         _simple_docx = simplify(docx.Document(doc_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        simple_docx = exactly_one(_simple_docx["VALUE"])["VALUE"]
+        simple_docx = ut.exactly_one(_simple_docx["VALUE"])["VALUE"]
 
         extract = fy.rcompose(
             values_of,
             fy.rpartial(fy.without, "[w:sdt]"),
-            map_(partial(fy.lremove, lambda d: d["TYPE"] == "CT_Empty")),
+            ut.map_(ut.lwhere_not(TYPE="CT_Empty")),
             fy.compact,
-            map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                         action=lambda p: exactly_one(p)["VALUE"],
-                         default=BookLoader.table_to_text)))
+            ut.map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                            action=lambda p: ut.exactly_one(p)["VALUE"],
+                            default=BookLoader.table_to_text)))
 
         return extract(simple_docx)
 

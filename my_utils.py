@@ -1,12 +1,14 @@
-from typing import TypeVar
+from typing import Mapping, TypeVar
 from collections.abc import Callable, Iterable, Iterator
+from funcy import curry, lremove
 
-map_: Callable = lambda f: lambda iterable: map(f, iterable)
-filter_: Callable = lambda p: lambda iterable: filter(p, iterable)
+map_: Callable = curry(map)
+filter_: Callable = curry(filter)
+lremove_: Callable = curry(lremove)
 
 T = TypeVar('T')
 def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:
-
+    """Lazily removes duplicates of elements meeting the predicate."""
     def _unique_if(iterable):
         seen = set()
         for item in iterable:
@@ -19,9 +21,23 @@ def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T
 
     return _unique_if
 
+# Adapted from:
+# https://github.com/Suor/funcy/blob/master/funcy/colls.py#L344-L348
+def lwhere_not(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
+    """Selects mappings omitting pairs in cond."""
+    def _lwhere_not(mappings):
+        return list(filter(
+            lambda m: all(k in m and m[k] != v for k, v in cond.items()),
+            mappings))
+
+    return _lwhere_not
+
+# Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
 def exactly_one(iterable: Iterable[T], too_short=None, too_long=None) -> T:
-
+    """Return the first item from *iterable*, which is expected to contain only
+    that item. Raise an exception if *iterable* is empty or has more than one
+    item."""
     it_ = iter(iterable)
 
     try:
