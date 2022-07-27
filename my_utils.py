@@ -1,10 +1,10 @@
 from typing import Mapping, TypeVar
 from collections.abc import Callable, Iterable, Iterator
-from funcy import curry, lremove
+from funcy import curry, lmap
 
-map_: Callable = curry(map)
-filter_: Callable = curry(filter)
-lremove_: Callable = curry(lremove)
+map_ = curry(map)
+lmap_ = curry(lmap)
+filter_ = curry(filter)
 
 T = TypeVar('T')
 def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:

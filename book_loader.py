@@ -4,6 +4,7 @@ from typing import TypeAlias, TypedDict
 from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
+import json
 from more_itertools import strip
 import funcy as fy
 import docx
@@ -14,36 +15,38 @@ values_of: Callable = partial(fy.pluck, "VALUE")
 
 Pattern: TypeAlias = re.Pattern[str]
 Marker: TypeAlias = Pattern | str
-MarkersPair: TypeAlias = tuple[str | Pattern, str | Pattern]
-PatternsPair: TypeAlias = tuple[Pattern, Pattern]
+MarkersPair: TypeAlias = list[str | Pattern]
+PatternsPair: TypeAlias = list[Pattern]
 
 class Markers(TypedDict):
-    slice_markers: MarkersPair
-    chapter_marker: Marker
-    header_marker: Marker
-    na_span_markers: MarkersPair
+    slice: MarkersPair
+    chapter: Marker
+    header: Marker
+    na_span: MarkersPair
 
 class BookLoader:
-    slice_markers: PatternsPair
-    chapter_marker: Pattern
-    header_marker: Pattern
-    na_span_markers: PatternsPair
+    doc_path: Path
+    slice: PatternsPair
+    chapter: Pattern
+    header: Pattern
+    na_span: PatternsPair
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
 
-    def __init__(self, doc_path: Path, markers: Markers):
+    def __init__(self, doc_path: str, markers: Markers):
 
-        assert doc_path.exists()
+        self.doc_path = Path(doc_path).expanduser().resolve()
+        assert self.doc_path.exists()
 
         compiled_markers = fy.walk_values(
-            fy.iffy(pred=fy.is_tuple,
-                    action=partial(fy.walk, re.compile),
+            fy.iffy(pred=fy.is_list,
+                    action=ut.lmap_(re.compile),
                     default=re.compile),
             markers)
 
         self.__dict__.update(compiled_markers)
 
-        self._paragraphs = self._etl_paragraphs(doc_path)
+        self._paragraphs = self._etl_paragraphs()
         self.chapters = [list(paragraphs) for _, paragraphs in
                          groupby(self._paragraphs, self._chapter_indexer())]
 
@@ -53,7 +56,7 @@ class BookLoader:
 
         def indexer(paragraph):
             nonlocal current_chapter
-            current_chapter += bool(self.chapter_marker.match(paragraph))
+            current_chapter += bool(self.chapter.match(paragraph))
             return current_chapter
 
         return indexer
@@ -64,23 +67,23 @@ class BookLoader:
 
         def validator(paragraph):
             nonlocal valid
-            bound_marker = self.na_span_markers[1 - valid]
+            bound_marker = self.na_span[1 - valid]
             if bound_marker.match(paragraph):
                 valid = not valid
             return valid
 
         return validator
 
-    def _etl_paragraphs(self, doc_path: Path) -> Iterator[str]:
+    def _etl_paragraphs(self) -> Iterator[str]:
 
         process = fy.rcompose(
             self.extract_paragraphs,
-            partial(strip, pred=fy.none_fn(*self.slice_markers)),
-            ut.unique_if(self.header_marker.match),
+            partial(strip, pred=fy.none_fn(*self.slice)),
+            ut.unique_if(self.header.match),
             ut.filter_(self._is_valid_span()),
             ut.map_(partial(self.word_bisection.sub, r"\1\2")))
 
-        return process(doc_path)
+        return process(self.doc_path)
 
 
     @staticmethod
@@ -117,30 +120,10 @@ class BookLoader:
 
 def main() -> None:
 
-    doc_path = Path("data/D5627-Dolan.docx").expanduser().resolve()
+    with open('parameters.json', 'r', encoding="utf-8") as json_file:
+        params = json.load(json_file)
 
-    start_marker = r"^Introduction$"
-    slice_markers = (start_marker, re.compile(r"^Annexe /$"))
-    conclusion_marker = r"^Conclusion$"
-    compiled_header_marker = re.compile(
-        rf"^Chapitre \d+ /.+"
-        rf"|{start_marker}"
-        rf"|^Stress, santé et performance au travail$"
-        rf"|{conclusion_marker}")
-    chapter_marker = rf"^Chapitre \d+ /$|{conclusion_marker}"
-    na_span_markers = (
-            r"^exerCiCe \d\.\d /$",
-            '|'.join([chapter_marker,
-                      r"^Les caractéristiques personnelles\.",
-                      r"/\tLocus de contrôle$",
-                      r"^L'observation de sujets a amené Rotter",
-                      r"^Lorsqu'une personne souffre de stress"]))
-
-    book = BookLoader(doc_path,
-                      {"slice_markers": slice_markers,
-                       "chapter_marker": chapter_marker,
-                       "header_marker": compiled_header_marker,
-                       "na_span_markers": na_span_markers})
+    book = BookLoader(**params)
 
     observed_lengths = [len(c) for c in book.chapters]
     expected_lengths = [44, 136, 194, 178, 345, 348, 29]
