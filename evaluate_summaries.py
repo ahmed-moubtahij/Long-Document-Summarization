@@ -1,10 +1,12 @@
 from pathlib import Path
 import json
+from typing import TypeAlias
 import jsonlines as jsonl
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 # PythonRouge may need:
 # opening files with encoding='utf-8' in pythonrouge.py
 # sudo apt-get install libxml-parser-perl
+
 from summarizer import french_sentencizer
 
 def main():
@@ -42,21 +44,22 @@ def calc_rouge_score(summaries, references) -> dict[str, float]:
     )
     return python_rouge.calc_score()
 
-def rouge_preproc(summarization_units: jsonl.Reader) -> tuple[list, list]:
-    # Formatting summaries & references to meet Pythonrouge requirements
-
+PythonRougeSummaries: TypeAlias = list[list[str]]
+PythonRougeReferences: TypeAlias = list[list[list[str]]]
+def rouge_preproc(
+    summarization_units: jsonl.Reader
+) -> tuple[PythonRougeSummaries, PythonRougeReferences]:
     # Each summarization unit has a system summary
     # A system summary must be a list of sentences
-    all_summaries: list[list[str]] = []
+    all_summaries = []
 
     # Each summarization unit has one or more references
     # Each reference must be a list of sentences
-    all_references: list[list[list[str]]] = []
+    all_references = []
 
-    # Not using sent_tokenize here because:
-    # CSS references are already one-sentence
-    # Summaries were produced with BTR's n_sentences=1
     sentencizer = french_sentencizer()
+    # TODO: Make sure the contents are correct and correctly aligned
+    #       and remove '\n's
     for summ_unit in summarization_units:
         summary_sents = sentencizer(summ_unit["summary"])
         all_summaries.append(summary_sents)
