@@ -38,6 +38,23 @@ def get_summaries_and_refs() -> tuple[list[str], list[str]]:
 
     print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
 
+    references_dir = Path("data/references").expanduser().resolve()
+    assert references_dir.exists()
+    references = [ref_file.read_text(encoding="utf-8")
+                  for ref_file in sorted(references_dir.iterdir())]
+
+    chapters_to_summarize = ['\n'.join(p for p in chapter)
+                             for chapter in read_chapters(1, 3)]
+
+    summaries = [trim(generate_summary(chapter))
+                 for chapter in tqdm(chapters_to_summarize)]
+
+    assert len(summaries) == len(references)
+
+    return summaries, references
+
+def read_chapters(first_chapter=0, last_chapter: int | None=None) -> list[list[str]]:
+
     with open('parameters.json', 'r', encoding="utf-8") as json_file:
         params = json.load(json_file)
 
@@ -47,21 +64,10 @@ def get_summaries_and_refs() -> tuple[list[str], list[str]]:
     expected_lengths = [44, 136, 194, 178, 345, 348, 29]
     assert observed_lengths == expected_lengths
 
-    references_dir = Path("data/references").expanduser().resolve()
-    assert references_dir.exists()
-    references = [ref_file.read_text(encoding="utf-8")
-                  for ref_file in sorted(references_dir.iterdir())]
+    if last_chapter is None:
+        return book.chapters[first_chapter: ]
 
-    chapters_to_summarize = ['\n'.join(p for p in chapter)
-                             for chapter in book.chapters[1: -3]]
-
-    summaries = [trim(generate_summary(chapter))
-                 for chapter in tqdm(chapters_to_summarize)]
-
-    assert len(summaries) == len(references)
-
-    return summaries, references
-
+    return book.chapters[first_chapter: last_chapter + 1]
 
 def generate_summary(text: str) -> str:
 
