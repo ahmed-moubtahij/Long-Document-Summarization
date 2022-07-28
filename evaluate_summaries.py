@@ -13,7 +13,7 @@ from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 
 def main():
 
-    model_name = "mbart"
+    model_name = "textrank"
     summaries_fp = f"data/output_summaries/{model_name}_summaries.jsonl"
     output_scores(summaries_fp, model_name)
 
@@ -78,10 +78,10 @@ def rouge_preproc(
     # TODO: Make sure the contents are correct and correctly aligned
     #       and remove '\n's
     for summ_unit in summarization_units:
-        summary_sents = sentencizer(summ_unit["summary"])
+        summary_sents = sentencizer(summ_unit["SUMMARY"])
         all_summaries.append(summary_sents)
 
-        reference_sents = sentencizer(summ_unit["reference"])
+        reference_sents = sentencizer(summ_unit["REFERENCE"])
         all_references.append([reference_sents])
 
     return all_summaries, all_references

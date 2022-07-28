@@ -24,6 +24,8 @@ class Markers(TypedDict):
     slice: MarkersPair
     chapter: Marker
     header: Marker
+    references: Marker
+    undesirables: Marker
     na_span: MarkersPair
 
 class BookLoader:
@@ -31,6 +33,8 @@ class BookLoader:
     slice: PatternsPair
     chapter: Pattern
     header: Pattern
+    references: Pattern
+    undesirables: Pattern
     na_span: PatternsPair
 
     word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
@@ -79,14 +83,17 @@ class BookLoader:
 
     def _etl_paragraphs(self) -> Iterator[str]:
 
-        process = fy.rcompose(
-            self.extract_paragraphs,
+        paragraphs = self.extract_paragraphs(self.doc_path)
+
+        transform = fy.rcompose(
             partial(strip, pred=fy.none_fn(*self.slice)),
             ut.unique_if(self.header.match),
             ut.filter_(self._is_valid_span()),
+            ut.remove_(self.references),    # pylint: disable=no-member, no-value-for-parameter
+            ut.remove_(self.undesirables),  # pylint: disable=no-member, no-value-for-parameter
             ut.map_(partial(self.word_bisection.sub, r"\1\2")))
 
-        return process(self.doc_path)
+        return transform(paragraphs)
 
 
     @staticmethod
@@ -129,7 +136,8 @@ def main() -> None:
     book = BookLoader(**params)
 
     observed_lengths = [len(c) for c in book.chapters]
-    expected_lengths = [44, 136, 194, 178, 345, 348, 29]
+    expected_lengths = [43, 101, 152, 136, 271, 307, 23]
+
     assert observed_lengths == expected_lengths
 
 if __name__ == "__main__":
