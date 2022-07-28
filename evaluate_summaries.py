@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from pathlib import Path
 import json
 from typing import TypeAlias
 import jsonlines as jsonl
+from spacy.lang.fr import French
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 # PythonRouge errors:
 # UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
@@ -9,18 +11,20 @@ from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 # subprocess.CalledProcessError
 #   sudo apt-get install libxml-parser-perl
 
-from summarizer import french_sentencizer
-
 def main():
 
-    output_scores("data/summaries.jsonl")
+    model_name = "mbart"
+    summaries_fp = f"data/output_summaries/{model_name}_summaries.jsonl"
+    output_scores(summaries_fp, model_name)
 
-def output_scores(summaries_fp: str):
+def output_scores(summaries_fp: str, model_name: str):
 
     _summaries_fp = Path(summaries_fp).expanduser().resolve()
     assert _summaries_fp.exists(), f"Unable to find {_summaries_fp}\n"
 
-    scores_path = Path("scores.jsonl").expanduser().resolve()
+    scores_path = Path("scores/").expanduser().resolve()
+    assert scores_path.exists()
+    scores_path /= f"{model_name}_scores.json"
 
     with jsonl.open(summaries_fp, mode='r') as summarization_units:
         summaries, references = rouge_preproc(summarization_units)
@@ -44,7 +48,18 @@ def calc_rouge_score(summaries, references) -> dict[str, float]:
         word_level=True, length_limit=False,
         scoring_formula="average", resampling=True, samples=1000
     )
+
     return python_rouge.calc_score()
+
+
+def french_sentencizer() -> Callable[[str], list[str]]:
+    nlp = French()
+    nlp.add_pipe("sentencizer")
+
+    def _sentencizer(text: str):
+        return list(map(str, nlp(text).sents))
+
+    return _sentencizer
 
 PythonRougeSummaries: TypeAlias = list[list[str]]
 PythonRougeReferences: TypeAlias = list[list[list[str]]]

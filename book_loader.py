@@ -5,11 +5,13 @@ from collections.abc import Iterator, Callable
 import re
 from itertools import groupby
 import json
+import warnings
 from more_itertools import strip
 import funcy as fy
 import docx
 from simplify_docx import simplify
 import my_utils as ut
+warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 
 values_of: Callable = partial(fy.pluck, "VALUE")
 
@@ -47,6 +49,7 @@ class BookLoader:
         self.__dict__.update(compiled_markers)
 
         self._paragraphs = self._etl_paragraphs()
+
         self.chapters = [list(paragraphs) for _, paragraphs in
                          groupby(self._paragraphs, self._chapter_indexer())]
 
