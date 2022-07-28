@@ -3,9 +3,11 @@ import json
 from typing import TypeAlias
 import jsonlines as jsonl
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
-# PythonRouge may need:
-# opening files with encoding='utf-8' in pythonrouge.py
-# sudo apt-get install libxml-parser-perl
+# PythonRouge errors:
+# UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
+#   add argument encoding='utf-8' to file open's in pythonrouge.py
+# subprocess.CalledProcessError
+#   sudo apt-get install libxml-parser-perl
 
 from summarizer import french_sentencizer
 

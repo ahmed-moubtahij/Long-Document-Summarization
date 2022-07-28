@@ -6,10 +6,14 @@ import torch
 from tqdm import tqdm
 from transformers.models.encoder_decoder.modeling_encoder_decoder import EncoderDecoderModel
 from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
+import spacy
 from spacy.lang.fr import French
 from book_loader import BookLoader
+spacy.prefer_gpu() # type: ignore
 
 def main() -> None:
+
+    print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
 
     summaries, references = get_summaries_and_refs()
 
@@ -20,8 +24,9 @@ def main() -> None:
 
     out_path = Path("data/").expanduser().resolve()
     assert out_path.exists()
+    out_path /= "summaries.jsonl"
 
-    with open(out_path/"summaries.jsonl", 'w', encoding='utf-8') as out_jsonl:
+    with open(out_path, 'w', encoding='utf-8') as out_jsonl:
         jsonl.Writer(out_jsonl).write_all(summary_units)
 
     with jsonl.open(out_path) as summarization_units:
@@ -36,8 +41,6 @@ def main() -> None:
 
 def get_summaries_and_refs() -> tuple[list[str], list[str]]:
 
-    print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
-
     references_dir = Path("data/references").expanduser().resolve()
     assert references_dir.exists()
     references = [ref_file.read_text(encoding="utf-8")
@@ -46,6 +49,7 @@ def get_summaries_and_refs() -> tuple[list[str], list[str]]:
     chapters_to_summarize = ['\n'.join(p for p in chapter)
                              for chapter in read_chapters(1, 3)]
 
+    print("GENERATING SUMMARIES PER CHAPTER...")
     summaries = [trim(generate_summary(chapter))
                  for chapter in tqdm(chapters_to_summarize)]
 
@@ -72,7 +76,6 @@ def read_chapters(first_chapter=0, last_chapter: int | None=None) -> list[list[s
 def generate_summary(text: str) -> str:
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"\nUSING {device.upper()}\n")
     ckpt = 'mrm8488/camembert2camembert_shared-finetuned-french-summarization'
     tokenizer = RobertaTokenizerFast.from_pretrained(ckpt)
     model = EncoderDecoderModel.from_pretrained(ckpt).to(device) # type: ignore
