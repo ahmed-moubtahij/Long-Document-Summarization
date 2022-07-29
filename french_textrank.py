@@ -1,36 +1,54 @@
 from collections.abc import Iterator, Callable
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 import heapq
 from operator import itemgetter
 import numpy as np
 import numpy.typing as npt
-from scipy.spatial import distance # type: ignore
-from sentence_transformers import SentenceTransformer # type: ignore
+from scipy.spatial import distance
+from sentence_transformers import SentenceTransformer
 from spacy.lang.fr import French
-
-# pylint: disable=invalid-name
-
 class FrenchTextRank():
 
     IndexedText: TypeAlias = tuple[int, str]
     IndexedTexts: TypeAlias = Iterator[IndexedText]
     Ranking: TypeAlias = npt.NDArray[np.float64]
     RankedText: TypeAlias = tuple[IndexedText, Ranking]
+    SentenceEncoder = Literal["camembert",
+                              "french_semantic",
+                              "hugorosen_flaubert",
+                              "inokufu_flaubert",
+                              "flaubert_education"]
 
     nlp = French()
     nlp.add_pipe("sentencizer")
-    sbert = SentenceTransformer('Sahajtomar/french_semantic')
 
-    # def __init__(self, n_sentences, damping_factor=0.8):
-    def __init__(self, damping_factor=0.8):
+    def __init__(self, damping_factor=0.8,
+                 sentence_encoder: SentenceEncoder = "camembert"):
 
-        # self.n_sentences = n_sentences
         self.damping_factor = damping_factor
+
+        match sentence_encoder:
+            case "camembert":
+                self.sentence_encoder = SentenceTransformer(
+                    "dangvantuan/sentence-camembert-large")
+            case "french_semantic":
+                self.sentence_encoder = SentenceTransformer(
+                    "Sahajtomar/french_semantic")
+            case "hugorosen_flaubert":
+                self.sentence_encoder = SentenceTransformer(
+                    "hugorosen/flaubert_base_uncased-xnli-sts")
+            case "inokufu_flaubert":
+                self.sentence_encoder = SentenceTransformer(
+                    "inokufu/flaubert-base-uncased-xnli-sts")
+            case "flaubert_education":
+                self.sentence_encoder = SentenceTransformer(
+                    "inokufu/flaubert-base-uncased-xnli-sts-finetuned-education")
 
     @staticmethod
     def sentencizer(text: str) -> list[str]:
         return list(map(str, FrenchTextRank.nlp(text).sents))
 
+    # pylint: disable=invalid-name
     def sim(self, u, v):
         return abs(1 - distance.cdist(u, v, 'cosine'))
 
@@ -38,6 +56,7 @@ class FrenchTextRank():
         return abs(1 - distance.cosine(u, v))
 
     def rescale(self, a):
+
         maximum = np.max(a)
         minimum = np.min(a)
 
@@ -71,12 +90,12 @@ class FrenchTextRank():
 
         return ranks
 
-    def get_sbert_embedding(self, text):
+    def get_sentence_encoding(self, text):
 
         if isinstance(text, (list, tuple)):
-            return self.sbert.encode(text)
+            return self.sentence_encoder.encode(text)
 
-        return self.sbert.encode([text])
+        return self.sentence_encoder.encode([text])
 
     def select_top_k_texts_preserving_order(self, texts, ranking, k) -> list[str]:
 
@@ -105,15 +124,12 @@ class FrenchTextRank():
 
         return sentences
 
-
-    def summarize(
-        self, doc: str,
-        n_sentences: int,
-        sent_pred: Callable[[str], bool]=lambda _: True):
+    def summarize(self, doc: str, n_sentences: int,
+                  sent_pred: Callable[[str], bool]=lambda _: True):
 
         sentences = self.get_sentences(doc, sent_pred)
 
-        embedded_sentences = self.get_sbert_embedding(sentences)
+        embedded_sentences = self.get_sentence_encoding(sentences)
 
         ranks = self.textrank(embedded_sentences)
 
