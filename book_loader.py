@@ -37,17 +37,18 @@ class BookLoader:
     undesirables: Pattern
     na_span: PatternsPair
 
-    word_bisection = re.compile(r"([A-Za-z]+)-\s([A-Za-z]+)")
+    word_bisection = re.compile(r"(\w+)-\s(\w+)", re.UNICODE)
 
     def __init__(self, doc_path: str, markers: Markers):
 
         self.doc_path = Path(doc_path).expanduser().resolve()
         assert self.doc_path.exists()
 
+        re_compile = partial(re.compile, flags=re.UNICODE)
         compiled_markers = fy.walk_values(
             fy.iffy(pred=fy.is_list,
-                    action=ut.lmap_(re.compile),
-                    default=re.compile),
+                    action=ut.lmap_(re_compile),
+                    default=re_compile),
             markers)
 
         self.__dict__.update(compiled_markers)
@@ -89,12 +90,18 @@ class BookLoader:
             partial(strip, pred=fy.none_fn(*self.slice)),
             ut.unique_if(self.header.match),
             ut.filter_(self._is_valid_span()),
-            ut.remove_(self.references),    # pylint: disable=no-member, no-value-for-parameter
-            ut.remove_(self.undesirables),  # pylint: disable=no-member, no-value-for-parameter
-            ut.map_(partial(self.word_bisection.sub, r"\1\2")))
+            # pylint: disable=no-value-for-parameter
+            ut.remove_(self.references),
+            ut.remove_(self.undesirables),
+            self.join_bisections)
 
         return transform(paragraphs)
 
+    @staticmethod
+    def join_bisections(paragraph: str) -> Iterator[str]:
+        return map(
+            partial(BookLoader.word_bisection.sub, r"\1\2"),
+            paragraph)
 
     @staticmethod
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
