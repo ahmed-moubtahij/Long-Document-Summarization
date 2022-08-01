@@ -1,58 +1,57 @@
-from functools import partial
+import warnings
 from pathlib import Path
-from typing import TypeAlias, TypedDict
-from collections.abc import Iterator, Callable
+from functools import partial
 import re
 import json
-import warnings
+from collections.abc import Iterator, Callable
+from typing import ClassVar, TypeAlias, TypedDict
+from typing_extensions import Required
 from more_itertools import strip
 import funcy as fy
 from funcy_chain import IterChain, Chain
 import docx
 from simplify_docx import simplify
+import deal
 import my_utils as ut
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 
-values_of: Callable = partial(fy.pluck, "VALUE")
-
-Pattern: TypeAlias = re.Pattern[str]
-Marker: TypeAlias = Pattern | str
-MarkersPair: TypeAlias = list[str | Pattern]
-PatternsPair: TypeAlias = list[Pattern]
-
-class Markers(TypedDict):
-    slice: MarkersPair
-    chapter: Marker
-    header: Marker
-    references: Marker
-    undesirables: Marker
-    na_span: MarkersPair
+Pattern:        TypeAlias = re.Pattern[str]
+Marker:         TypeAlias = Pattern | str
+MarkersPair:    TypeAlias = list[str | Pattern]
+PatternsPair:   TypeAlias = list[Pattern]
 
 class BookLoader:
-    doc_path: Path
-    slice: PatternsPair
-    chapter: Pattern
-    header: Pattern
-    references: Pattern
-    undesirables: Pattern
-    na_span: PatternsPair
-    chapters: list[list[str]]
+    class Markers(TypedDict, total=False):
+        chapter:        Required[Marker]
+        slice:          MarkersPair
+        header:         Marker
+        references:     Marker
+        undesirables:   Marker
+        na_span:        MarkersPair
 
-    re_compile = partial(re.compile, flags=re.UNICODE)
+    re_compile_unicode: ClassVar = partial(re.compile, flags=re.UNICODE)
+    _match_anything:    ClassVar = re.compile(".*", flags=re.DOTALL)
+    _match_nothing:     ClassVar = re.compile("a^")
+
+    chapter:        Pattern
+    slice:          PatternsPair = [_match_anything, _match_anything]
+    header:         Pattern = _match_nothing
+    references:     Pattern = _match_nothing
+    undesirables:   Pattern = _match_nothing
+    na_span:        PatternsPair = [_match_nothing, _match_nothing]
+
+    chapters:       list[list[str]]
 
     def __init__(self, doc_path: str, markers: Markers):
 
-        self.doc_path = Path(doc_path).expanduser().resolve()
-        assert self.doc_path.exists()
-
         _compiled_markers = fy.walk_values(
             fy.iffy(pred=fy.is_list,
-                    action=ut.lmap_(self.re_compile),
-                    default=self.re_compile),
+                    action=ut.lmap_(self.re_compile_unicode),
+                    default=self.re_compile_unicode),
             markers)
         self.__dict__.update(_compiled_markers)
 
-        _paragraphs = self._etl_paragraphs()
+        _paragraphs = self._etl_paragraphs(doc_path)
         self.chapters = (Chain(_paragraphs)
                             .group_by(self._chapter_indexer())
                             .values()
@@ -83,9 +82,10 @@ class BookLoader:
 
         return validator
 
-    def _etl_paragraphs(self) -> Iterator[str]:
+    def _etl_paragraphs(self, doc_path: str) -> Iterator[str]:
 
-        paragraphs = self.extract_paragraphs(self.doc_path)
+        paragraphs = self.extract_paragraphs(
+            Path(doc_path).expanduser().resolve())
 
         return (IterChain(paragraphs)
                     .thru(partial(strip, pred=fy.none_fn(*self.slice)))
@@ -99,12 +99,13 @@ class BookLoader:
     @staticmethod
     def join_bisections() -> Callable[[str], Iterator[str]]:
 
-        bisection = re.compile(r"(\w+)-\s(\w+)", re.UNICODE)
+        bisection = BookLoader.re_compile_unicode(r"(\w+)-\s(\w+)")
 
         return lambda paragraph: map(
             partial(bisection.sub, r"\1\2"), paragraph)
 
     @staticmethod
+    @deal.pre(lambda doc_path: doc_path.exists())
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
 
         _simple_docx = simplify(docx.Document(doc_path),
@@ -113,26 +114,30 @@ class BookLoader:
         simple_docx = ut.exactly_one(_simple_docx["VALUE"])["VALUE"]
 
         return (IterChain(simple_docx)
-                    .thru(values_of)
+                    .pluck("VALUE")
                     .without("[w:sdt]")
                     .map(ut.lwhere_not_(TYPE="CT_Empty"))
                     .compact()
                     .map(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
                                  action=lambda p: ut.exactly_one(p)["VALUE"],
-                                 default=BookLoader.table_to_text))
+                                 default=BookLoader.table_to_text()))
                ).value
 
     @staticmethod
-    def table_to_text(table: list[dict[str, list[dict]]]) -> str:
+    def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
 
-        assert all(e["TYPE"] == "table-row" for e in table)
+        values_of = partial(fy.pluck, "VALUE")
 
-        return ' '.join(
-            text
-            for row in values_of(table)
-            for cell in values_of(row)
-            for content in values_of(cell)
-            for text in values_of(content))
+        @deal.pre(lambda table: all(e["TYPE"] == "table-row" for e in table))
+        def _table_to_text(table):
+            return ' '.join(
+                text
+                for row in values_of(table)
+                for cell in values_of(row)
+                for content in values_of(cell)
+                for text in values_of(content))
+
+        return _table_to_text
 
 
 def main() -> None:
