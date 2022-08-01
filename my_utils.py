@@ -1,4 +1,4 @@
-from typing import Mapping, TypeVar
+from typing import Mapping, TypeAlias, TypeVar
 from collections.abc import Callable, Iterable, Iterator
 
 T = TypeVar('T')
@@ -31,7 +31,10 @@ def lwhere_not_(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
-def exactly_one(iterable: Iterable[T], too_short=None, too_long=None) -> T:
+UtException: TypeAlias = type[Exception] | Exception | None # type: ignore
+def exactly_one(iterable: Iterable[T],
+                too_short: UtException=None,
+                too_long: UtException=None) -> T:
     """Return the first item from *iterable*, which is expected to contain only
     that item. Raise an exception if *iterable* is empty or has more than one
     item."""
