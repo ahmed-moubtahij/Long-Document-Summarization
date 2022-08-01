@@ -3,11 +3,11 @@ from pathlib import Path
 from typing import TypeAlias, TypedDict
 from collections.abc import Iterator, Callable
 import re
-from itertools import groupby
 import json
 import warnings
 from more_itertools import strip
 import funcy as fy
+from funcy_chain import IterChain, Chain
 import docx
 from simplify_docx import simplify
 import my_utils as ut
@@ -36,27 +36,28 @@ class BookLoader:
     references: Pattern
     undesirables: Pattern
     na_span: PatternsPair
+    chapters: list[list[str]]
 
-    word_bisection = re.compile(r"(\w+)-\s(\w+)", re.UNICODE)
+    re_compile = partial(re.compile, flags=re.UNICODE)
 
     def __init__(self, doc_path: str, markers: Markers):
 
         self.doc_path = Path(doc_path).expanduser().resolve()
         assert self.doc_path.exists()
 
-        re_compile = partial(re.compile, flags=re.UNICODE)
-        compiled_markers = fy.walk_values(
+        _compiled_markers = fy.walk_values(
             fy.iffy(pred=fy.is_list,
-                    action=ut.lmap_(re_compile),
-                    default=re_compile),
+                    action=ut.lmap_(self.re_compile),
+                    default=self.re_compile),
             markers)
+        self.__dict__.update(_compiled_markers)
 
-        self.__dict__.update(compiled_markers)
-
-        self._paragraphs = self._etl_paragraphs()
-
-        self.chapters = [list(paragraphs) for _, paragraphs in
-                         groupby(self._paragraphs, self._chapter_indexer())]
+        _paragraphs = self._etl_paragraphs()
+        self.chapters = (Chain(_paragraphs)
+                            .group_by(self._chapter_indexer())
+                            .values()
+                            .map(list)
+                        ).value
 
     def _chapter_indexer(self) -> Callable[[str], int]:
 
@@ -86,22 +87,22 @@ class BookLoader:
 
         paragraphs = self.extract_paragraphs(self.doc_path)
 
-        transform = fy.rcompose(
-            partial(strip, pred=fy.none_fn(*self.slice)),
-            ut.unique_if(self.header.match),
-            ut.filter_(self._is_valid_span()),
-            # pylint: disable=no-value-for-parameter
-            ut.remove_(self.references),
-            ut.remove_(self.undesirables),
-            self.join_bisections)
-
-        return transform(paragraphs)
+        return (IterChain(paragraphs)
+                    .thru(partial(strip, pred=fy.none_fn(*self.slice)))
+                    .thru(ut.unique_if_(self.header.match))
+                    .filter(self._is_valid_span())
+                    .remove(self.references)
+                    .remove(self.undesirables)
+                    .thru(self.join_bisections())
+               ).value
 
     @staticmethod
-    def join_bisections(paragraph: str) -> Iterator[str]:
-        return map(
-            partial(BookLoader.word_bisection.sub, r"\1\2"),
-            paragraph)
+    def join_bisections() -> Callable[[str], Iterator[str]]:
+
+        bisection = re.compile(r"(\w+)-\s(\w+)", re.UNICODE)
+
+        return lambda paragraph: map(
+            partial(bisection.sub, r"\1\2"), paragraph)
 
     @staticmethod
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
@@ -111,16 +112,15 @@ class BookLoader:
                                 "include-paragraph-numbering": False})
         simple_docx = ut.exactly_one(_simple_docx["VALUE"])["VALUE"]
 
-        extract = fy.rcompose(
-            values_of,
-            fy.rpartial(fy.without, "[w:sdt]"),
-            ut.map_(ut.lwhere_not(TYPE="CT_Empty")),
-            fy.compact,
-            ut.map_(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                            action=lambda p: ut.exactly_one(p)["VALUE"],
-                            default=BookLoader.table_to_text)))
-
-        return extract(simple_docx)
+        return (IterChain(simple_docx)
+                    .thru(values_of)
+                    .without("[w:sdt]")
+                    .map(ut.lwhere_not_(TYPE="CT_Empty"))
+                    .compact()
+                    .map(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
+                                 action=lambda p: ut.exactly_one(p)["VALUE"],
+                                 default=BookLoader.table_to_text))
+               ).value
 
     @staticmethod
     def table_to_text(table: list[dict[str, list[dict]]]) -> str:

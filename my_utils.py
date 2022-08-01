@@ -1,14 +1,13 @@
 from typing import Mapping, TypeVar
 from collections.abc import Callable, Iterable, Iterator
-from funcy import curry, lmap, remove
-
-map_ = curry(map)
-lmap_ = curry(lmap)
-filter_ = curry(filter)
-remove_ = curry(remove)
 
 T = TypeVar('T')
-def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:
+R = TypeVar('R')
+
+def lmap_(unary_op: Callable[[T], R]) -> Callable[[Iterable[T]], list[R]]:
+    return lambda iterable: list(map(unary_op, iterable))
+
+def unique_if_(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:
     """Lazily removes duplicates of elements meeting the predicate."""
     def _unique_if(iterable):
         seen = set()
@@ -24,14 +23,11 @@ def unique_if(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T
 
 # Adapted from:
 # https://github.com/Suor/funcy/blob/master/funcy/colls.py#L344-L348
-def lwhere_not(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
+def lwhere_not_(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
     """Selects mappings omitting pairs in cond."""
-    def _lwhere_not(mappings):
-        return list(filter(
-            lambda m: all(k in m and m[k] != v for k, v in cond.items()),
-            mappings))
-
-    return _lwhere_not
+    return lambda mappings: list(filter(
+        lambda m: all(k in m and m[k] != v for k, v in cond.items()),
+        mappings))
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
