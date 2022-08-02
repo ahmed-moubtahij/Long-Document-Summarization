@@ -19,19 +19,19 @@ Pattern:        TypeAlias = re.Pattern[str]
 Marker:         TypeAlias = Pattern | str
 MarkersPair:    TypeAlias = list[str | Pattern]
 PatternsPair:   TypeAlias = list[Pattern]
+class Markers(TypedDict, total=False):
 
+    chapter:        Required[Marker]
+    slice:          MarkersPair
+    header:         Marker
+    references:     Marker
+    undesirables:   Marker
+    na_span:        MarkersPair
 class BookLoader:
-    class Markers(TypedDict, total=False):
-        chapter:        Required[Marker]
-        slice:          MarkersPair
-        header:         Marker
-        references:     Marker
-        undesirables:   Marker
-        na_span:        MarkersPair
 
-    re_compile_unicode: ClassVar = partial(re.compile, flags=re.UNICODE)
-    _match_anything:    ClassVar = re.compile(".*", flags=re.DOTALL)
-    _match_nothing:     ClassVar = re.compile("a^")
+    re_compile_unicode: ClassVar[Callable] = partial(re.compile, flags=re.UNICODE)
+    _match_anything:    ClassVar[Pattern] = re.compile(".*", flags=re.DOTALL)
+    _match_nothing:     ClassVar[Pattern] = re.compile("a^")
 
     chapter:        Pattern
     slice:          PatternsPair = [_match_anything, _match_anything]
@@ -55,7 +55,6 @@ class BookLoader:
         self.chapters = (Chain(_paragraphs)
                             .group_by(self._chapter_indexer())
                             .values()
-                            .map(list)
                         ).value
 
     def _chapter_indexer(self) -> Callable[[str], int]:
