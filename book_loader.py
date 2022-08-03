@@ -1,24 +1,26 @@
 import warnings
 from pathlib import Path
-from functools import partial
 import re
 import json
 from collections.abc import Iterator, Callable
 from typing import ClassVar, TypeAlias, TypedDict
 from typing_extensions import Required
-from more_itertools import strip
+
 import funcy as fy
 from funcy_chain import IterChain, Chain
-import docx
+from docx import Document
 from simplify_docx import simplify
 import deal
+
 import my_utils as ut
+
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 
 Pattern:        TypeAlias = re.Pattern[str]
 Marker:         TypeAlias = Pattern | str
 MarkersPair:    TypeAlias = list[str | Pattern]
 PatternsPair:   TypeAlias = list[Pattern]
+
 class Markers(TypedDict, total=False):
 
     chapter:        Required[Marker]
@@ -27,9 +29,10 @@ class Markers(TypedDict, total=False):
     references:     Marker
     undesirables:   Marker
     na_span:        MarkersPair
+
 class BookLoader:
 
-    re_compile_unicode: ClassVar[Callable] = partial(re.compile, flags=re.UNICODE)
+    re_compile_unicode: ClassVar[Callable] = fy.partial(re.compile, flags=re.UNICODE)
     _match_anything:    ClassVar[Pattern] = re.compile(".*", flags=re.DOTALL)
     _match_nothing:     ClassVar[Pattern] = re.compile("a^")
 
@@ -87,7 +90,7 @@ class BookLoader:
             Path(doc_path).expanduser().resolve())
 
         return (IterChain(paragraphs)
-                    .thru(partial(strip, pred=fy.none_fn(*self.slice)))
+                    .thru(ut.strip_(fy.none_fn(*self.slice)))
                     .thru(ut.unique_if_(self.header.match))
                     .filter(self._is_valid_span())
                     .remove(self.references)
@@ -99,18 +102,18 @@ class BookLoader:
     def join_bisections() -> Callable[[str], Iterator[str]]:
 
         bisection = BookLoader.re_compile_unicode(r"(\w+)-\s(\w+)")
+        join_bisection = fy.partial(bisection.sub, r"\1\2")
 
-        return lambda paragraph: map(
-            partial(bisection.sub, r"\1\2"), paragraph)
+        return lambda paragraph: map(join_bisection, paragraph)
 
     @staticmethod
     @deal.pre(lambda doc_path: doc_path.exists())
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
 
-        _simple_docx = simplify(docx.Document(doc_path),
+        _simple_docx = simplify(Document(doc_path),
                                {"include-paragraph-indent": False,
                                 "include-paragraph-numbering": False})
-        simple_docx = ut.exactly_one(_simple_docx["VALUE"])["VALUE"]
+        simple_docx = ut.one_expected(_simple_docx["VALUE"])["VALUE"]
 
         return (IterChain(simple_docx)
                     .pluck("VALUE")
@@ -118,14 +121,14 @@ class BookLoader:
                     .map(ut.lwhere_not_(TYPE="CT_Empty"))
                     .compact()
                     .map(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
-                                 action=lambda p: ut.exactly_one(p)["VALUE"],
+                                 action=lambda p: ut.one_expected(p)["VALUE"],
                                  default=BookLoader.table_to_text()))
                ).value
 
     @staticmethod
     def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
 
-        values_of = partial(fy.pluck, "VALUE")
+        values_of = fy.partial(fy.pluck, "VALUE")
 
         @deal.pre(lambda table: all(e["TYPE"] == "table-row" for e in table))
         def _table_to_text(table):

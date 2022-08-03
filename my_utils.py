@@ -3,11 +3,12 @@ from collections.abc import Callable, Iterable, Iterator
 
 T = TypeVar('T')
 R = TypeVar('R')
+UnaryPred: TypeAlias = Callable[[T], object]
 
 def lmap_(unary_op: Callable[[T], R]) -> Callable[[Iterable[T]], list[R]]:
     return lambda iterable: list(map(unary_op, iterable))
 
-def unique_if_(pred: Callable[[T], object]) -> Callable[[Iterable[T]], Iterator[T]]:
+def unique_if_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
     """Lazily removes duplicates of elements meeting the predicate."""
     def _unique_if(iterable):
         seen = set()
@@ -30,11 +31,44 @@ def lwhere_not_(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
         mappings))
 
 # Adapted from:
+# https://docs.python.org/3/library/itertools.html#itertools.dropwhile
+def dropwhile(pred: UnaryPred[T], iterable: Iterable[T]) -> Iterator[T]:
+
+    iterable = iter(iterable)
+    for x in iterable:
+        if not pred(x):
+            yield x
+            break
+    for x in iterable:
+        yield x
+
+# Adapted from:
+# https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#rstrip
+def rstrip(iterable: Iterable[T], pred: UnaryPred[T]) -> Iterator[T]:
+
+    cache = []
+    for x in iterable:
+        if pred(x):
+            cache.append(x)
+        else:
+            yield from cache
+            cache.clear()
+            yield x
+
+# Adapted from:
+# https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#strip
+def strip(iterable: Iterable[T], pred: UnaryPred[T]) -> Iterator[T]:
+    return rstrip(dropwhile(pred, iterable), pred)
+
+def strip_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
+    return lambda iterable: strip(iterable, pred)
+
+# Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
 UtException: TypeAlias = type[Exception] | Exception | None # type: ignore
-def exactly_one(iterable: Iterable[T],
-                too_short: UtException=None,
-                too_long: UtException=None) -> T:
+def one_expected(iterable: Iterable[T],
+                 too_short: UtException=None,
+                 too_long: UtException=None) -> T:
     """Return the first item from *iterable*, which is expected to contain only
     that item. Raise an exception if *iterable* is empty or has more than one
     item."""

@@ -1,7 +1,0 @@
-[MASTER]
-init-hook = 'import sys; sys.path.append("/home/ahmedm/anaconda3/envs/LDS/lib/python3.9/site-packages")
-
-disable=
-    C0114, # missing-module-docstring
-    C0115, # missing-class-docstring
-    C0116, # missing-function-docstring

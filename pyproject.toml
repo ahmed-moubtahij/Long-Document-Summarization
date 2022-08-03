@@ -1,0 +1,27 @@
+[project]
+name = "French_LDS"
+version = "0.1.0"
+description = "Long Document Summarization of chaptered french books."
+authors = [
+    {name = "Ahmed Moubtahij", email="ahmed.moubtahij.1@ens.etsmtl.ca"},
+]
+requires-python = ">=3.10.5"
+keywords = ["NLP", "Long Document Summarization", "French"]
+
+[project.urls]
+homepage = "https://github.com/LiNCS-lab/LDS"
+
+[tool.pyright]
+stubPath = ""
+reportPrivateImportUsage = false
+
+[tool.mypy]
+plugins = ["deal.mypy"]
+ignore_missing_imports = true
+
+[tool.pylint]
+disable= ["missing-module-docstring",
+          "missing-class-docstring",
+          "missing-function-docstring",
+          "invalid-name"]
+

@@ -1,3 +1,10 @@
+"""
+In case of PythonRouge errors:
+* UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
+    - add argument `encoding='utf-8'` to all file open's in pythonrouge.py
+* subprocess.CalledProcessError:
+    -sudo apt-get install libxml-parser-perl
+"""
 from collections.abc import Callable
 from pathlib import Path
 import json
@@ -5,17 +12,17 @@ from typing import TypeAlias
 import jsonlines as jsonl
 from spacy.lang.fr import French
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
-# PythonRouge errors:
-# UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
-#   add argument encoding='utf-8' to file open's in pythonrouge.py
-# subprocess.CalledProcessError
-#   sudo apt-get install libxml-parser-perl
+
+# TODO: typehint and contract this
 
 def main():
 
-    model_name = "textrank"
-    summaries_fp = f"data/output_summaries/{model_name}_summaries.jsonl"
-    output_scores(summaries_fp, model_name)
+    # pylint: disable=invalid-name
+    # TODO: `EXPERIMENT_ID` should be synchronized with summarizer
+    MODEL_NAME = "textrank"
+    EXPERIMENT_ID = f"{MODEL_NAME}_flaubert_base_uncased-xnli-sts"
+    summaries_fp = f"data/output_summaries/{EXPERIMENT_ID}_summaries.jsonl"
+    output_scores(summaries_fp, EXPERIMENT_ID)
 
 def output_scores(summaries_fp: str, model_name: str):
 
