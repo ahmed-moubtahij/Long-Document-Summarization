@@ -5,10 +5,8 @@ from typing import ClassVar, Literal
 
 import deal
 import jsonlines as jsonl
-from tqdm import tqdm
 from more_itertools import chunked_even
 import torch
-# pyright: reportPrivateImportUsage=false
 from transformers import EncoderDecoderModel
 from transformers import RobertaTokenizerFast
 from transformers import AutoTokenizer
@@ -26,36 +24,25 @@ def main():
 
     print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
 
-    MODEL_NAME = "camembert"
+    MODEL_NAME = "textrank"
 
-    summarizer = make_summarizer(MODEL_NAME)
+    summarizer = make_summarizer(MODEL_NAME, sentence_encoder="french_semantic")
     references = read_references(Path("data/references"))
 
     chapters_to_summarize = read_chapters(1, 3)
 
     print("GENERATING SUMMARIES PER CHAPTER...")
-    if MODEL_NAME == "textrank":
-        ref_lens = [len(FrenchSummarizer.sentencizer(ref)) for ref in references]
-        summaries = [
-            summarizer( # pylint: disable=not-callable # pyright: reportGeneralTypeIssues=false
-                chapter,
-                n_sentences=ref_n_sents,
-                sent_pred=lambda s: len(s.split()) > 4)
-            for chapter, ref_n_sents in zip(chapters_to_summarize, ref_lens)
-        ]
-    else:
-        summaries = [
-            summarizer( # pylint: disable=not-callable # pyright: reportGeneralTypeIssues=false
-                chapter, trim=True)
-            for chapter in tqdm(chapters_to_summarize)
-        ]
-
-    assert len(summaries) == len(references) # postcond
-
-    # TODO: Do this dict-ification right at `summaries` initialization
     summary_units = [
-        {"CHAPTER": idx + 1, "SUMMARY": summary, "REFERENCE": ref}
-        for idx, (summary, ref) in enumerate(zip(summaries, references))
+        {
+            "CHAPTER": idx + 1,
+            # pylint: disable=not-callable # pyright: reportGeneralTypeIssues=false
+            "SUMMARY": (summarizer(chapter) if MODEL_NAME != "textrank"
+                        else summarizer(chapter,
+                                        n_sentences=len(FrenchSummarizer.sentencizer(ref)),
+                                        sent_pred=lambda s: len(s.split()) > 4)),
+            "REFERENCE": ref
+        }
+        for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
     ]
 
     out_path = output_summaries(
@@ -67,7 +54,7 @@ def main():
 
 def make_summarizer(
     model_name: Literal["camembert", "mbart", "textrank"],
-    sentence_encoder=None
+    sentence_encoder: FrenchTextRank.SentenceEncoder =None
 ) -> FrenchSummarizer | FrenchTextRank:
 
     match model_name:
@@ -112,7 +99,7 @@ class Mbart(FrenchSummarizer):
             self.model, self.tokenizer,
             device=self.model.device)
 
-    def __call__(self, text: str, trim=False) -> str:
+    def __call__(self, text: str, trim=True) -> str:
 
         memory_safe_n_chunks = 512
 
@@ -137,7 +124,7 @@ class Camembert(FrenchSummarizer):
         self.model = EncoderDecoderModel.from_pretrained(ckpt)
         self.model = self.model.to(self.device) # type: ignore
 
-    def __call__(self, text: str, trim: bool = False) -> str:
+    def __call__(self, text: str, trim=True) -> str:
 
         inputs = self.tokenizer(
             [text], padding="max_length",

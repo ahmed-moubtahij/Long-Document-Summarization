@@ -89,8 +89,8 @@ class FrenchTextRank():
 
         for row in matrix:
             row_sum = np.sum(row)
-            # if row_sum != 0:
-            row /= row_sum
+            if row_sum != 0:
+                row /= row_sum
 
         return matrix
 
