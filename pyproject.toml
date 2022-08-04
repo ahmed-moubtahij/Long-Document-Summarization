@@ -16,12 +16,27 @@ stubPath = ""
 reportPrivateImportUsage = false
 
 [tool.mypy]
+python_version = "3.10"
+exclude = "env_LDS/"
 plugins = ["deal.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "transformers.*",
+    "funcy.*",
+    "funcy_chain.*",
+    "docx.*",
+    "simplify_docx.*",
+    "scipy.spatial.*",
+    "sentence_transformers.*",
+
+]
 ignore_missing_imports = true
 
 [tool.pylint]
-disable= ["missing-module-docstring",
-          "missing-class-docstring",
-          "missing-function-docstring",
-          "invalid-name"]
+ignore = "env_LDS"
+disable = ["missing-module-docstring",
+           "missing-class-docstring",
+           "missing-function-docstring",
+           "invalid-name"]
 
