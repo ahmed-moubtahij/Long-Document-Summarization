@@ -1,13 +1,16 @@
 from typing import Mapping, TypeAlias, TypeVar
 from collections.abc import Callable, Iterable, Iterator
+import deal
 
 T = TypeVar('T')
 R = TypeVar('R')
 UnaryPred: TypeAlias = Callable[[T], object]
 
+@deal.pure
 def lmap_(unary_op: Callable[[T], R]) -> Callable[[Iterable[T]], list[R]]:
     return lambda iterable: list(map(unary_op, iterable))
 
+@deal.pure
 def unique_if_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
     """Lazily removes duplicates of elements meeting the predicate."""
     def _unique_if(iterable):
@@ -24,6 +27,7 @@ def unique_if_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
 
 # Adapted from:
 # https://github.com/Suor/funcy/blob/master/funcy/colls.py#L344-L348
+@deal.pure
 def lwhere_not_(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
     """Selects mappings omitting pairs in cond."""
     return lambda mappings: list(filter(
@@ -32,6 +36,7 @@ def lwhere_not_(**cond: object) -> Callable[[Iterable[Mapping]], list[Mapping]]:
 
 # Adapted from:
 # https://docs.python.org/3/library/itertools.html#itertools.dropwhile
+@deal.pure
 def dropwhile(pred: UnaryPred[T], iterable: Iterable[T]) -> Iterator[T]:
 
     iterable = iter(iterable)
@@ -44,6 +49,7 @@ def dropwhile(pred: UnaryPred[T], iterable: Iterable[T]) -> Iterator[T]:
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#rstrip
+@deal.pure
 def rstrip(iterable: Iterable[T], pred: UnaryPred[T]) -> Iterator[T]:
 
     cache = []
@@ -57,15 +63,18 @@ def rstrip(iterable: Iterable[T], pred: UnaryPred[T]) -> Iterator[T]:
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#strip
+@deal.pure
 def strip(iterable: Iterable[T], pred: UnaryPred[T]) -> Iterator[T]:
     return rstrip(dropwhile(pred, iterable), pred)
 
+@deal.pure
 def strip_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
     return lambda iterable: strip(iterable, pred)
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
 UtException: TypeAlias = type[Exception] | Exception | None # type: ignore
+@deal.pure
 def one_expected(iterable: Iterable[T],
                  too_short: UtException=None,
                  too_long: UtException=None) -> T:
