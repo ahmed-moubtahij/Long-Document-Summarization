@@ -10,7 +10,7 @@ from spacy.lang.fr import French
 import deal
 
 # TODO: Typehint & contract this
-@deal.inv(lambda french_TR: 0.0 <= french_TR.damping_factor <= 1.0)
+# @deal.inv(lambda french_TR: 0.0 <= french_TR.damping_factor <= 1.0)
 class FrenchTextRank():
 
     IndexedText:        TypeAlias = tuple[int, str]
@@ -25,6 +25,7 @@ class FrenchTextRank():
     nlp: ClassVar = French()
     nlp.add_pipe("sentencizer")
 
+    @deal.has('io')
     @deal.raises(NotImplementedError)
     def __init__(self,
                  damping_factor=0.8, # TODO: Is the damping factor correctly used?
@@ -52,14 +53,14 @@ class FrenchTextRank():
                 raise NotImplementedError(
                     f"Sentence encoder: {sentence_encoder} is not implemented.")
 
-    @deal.pure
     @deal.pre(lambda _: _.n_sentences > 0)
     def __call__(self,
                  doc: str,
                  n_sentences: int,
-                 sent_pred: Callable[[str], object]=lambda _: True
+                 sent_pred: Callable[[str], object] = lambda _: True
                 ) -> str:
 
+        # TODO: `sentences` can be ran through a `thru` IterChain
         sentences = self.get_sentences(doc, sent_pred)
         embedded_sentences = self.get_sentence_encoding(sentences)
         ranks = self.textrank(embedded_sentences)
@@ -69,11 +70,11 @@ class FrenchTextRank():
 
         return summary
 
-    @deal.pure
     @staticmethod
     def sentencizer(text: str) -> list[str]:
         return list(map(str, FrenchTextRank.nlp(text).sents))
 
+    @deal.has()
     @deal.raises(TypeError, ValueError)
     def sim(self, u, v):
         return abs(1 - distance.cdist(u, v, 'cosine'))
@@ -90,7 +91,7 @@ class FrenchTextRank():
 
         return (a - minimum) / (maximum - minimum)
 
-    @deal.pure
+    @deal.has()
     def normalize(self, matrix):
 
         for row in matrix:
@@ -100,7 +101,6 @@ class FrenchTextRank():
 
         return matrix
 
-    @deal.has()
     @deal.raises(ValueError)
     @deal.pre(lambda _: 0.0 <= _.similarity_threshold <= 1.0)
     def textrank(self, texts_embeddings, similarity_threshold=0.8):
@@ -122,7 +122,6 @@ class FrenchTextRank():
 
         return ranks
 
-    @deal.pure
     def get_sentence_encoding(self, text):
 
         if isinstance(text, (list, tuple)):
@@ -147,7 +146,6 @@ class FrenchTextRank():
 
         return top_texts_in_preserved_order
 
-    @deal.pure
     def get_sentences(self, text: str, sent_pred: Callable[[str], object]) -> list[str]:
 
         paragraphs = text.split('\n')

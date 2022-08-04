@@ -11,6 +11,10 @@ keywords = ["NLP", "Long Document Summarization", "French"]
 [project.urls]
 homepage = "https://github.com/LiNCS-lab/LDS"
 
+
+[build-system]
+requires = ["setuptools", "wheel"]
+
 [tool.pyright]
 stubPath = ""
 reportPrivateImportUsage = false
@@ -38,5 +42,6 @@ ignore = "env_LDS"
 disable = ["missing-module-docstring",
            "missing-class-docstring",
            "missing-function-docstring",
-           "invalid-name"]
+           "invalid-name",
+           "too-few-public-methods"]
 

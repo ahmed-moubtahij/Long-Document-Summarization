@@ -17,7 +17,7 @@ from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 # TODO: typehint and contract this
 
 @deal.has('io', 'stdout', 'write')
-@deal.raises(AssertionError)
+@deal.raises(AssertionError, ValueError)
 def main():
 
     # TODO: `EXPERIMENT_ID` should be synchronized with summarizer

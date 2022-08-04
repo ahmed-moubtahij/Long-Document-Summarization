@@ -5,6 +5,7 @@ import deal
 T = TypeVar('T')
 R = TypeVar('R')
 UnaryPred: TypeAlias = Callable[[T], object]
+UtException: TypeAlias = type[Exception] | Exception | None # type: ignore
 
 @deal.pure
 def lmap_(unary_op: Callable[[T], R]) -> Callable[[Iterable[T]], list[R]]:
@@ -73,8 +74,8 @@ def strip_(pred: UnaryPred[T]) -> Callable[[Iterable[T]], Iterator[T]]:
 
 # Adapted from:
 # https://more-itertools.readthedocs.io/en/stable/_modules/more_itertools/more.html#one
-UtException: TypeAlias = type[Exception] | Exception | None # type: ignore
-@deal.pure
+@deal.has()
+@deal.raises(ValueError)
 def one_expected(iterable: Iterable[T],
                  too_short: UtException=None,
                  too_long: UtException=None) -> T:
