@@ -10,20 +10,24 @@ from pathlib import Path
 import json
 from typing import TypeAlias
 import jsonlines as jsonl
+import deal
 from spacy.lang.fr import French
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 
 # TODO: typehint and contract this
 
+@deal.has('io', 'stdout', 'write')
+@deal.raises(AssertionError)
 def main():
 
-    # pylint: disable=invalid-name
     # TODO: `EXPERIMENT_ID` should be synchronized with summarizer
     MODEL_NAME = "textrank"
     EXPERIMENT_ID = f"{MODEL_NAME}_flaubert_base_uncased-xnli-sts"
     summaries_fp = f"data/output_summaries/{EXPERIMENT_ID}_summaries.jsonl"
     output_scores(summaries_fp, EXPERIMENT_ID)
 
+@deal.has('io', 'stdout', 'write')
+@deal.raises(AssertionError, ValueError)
 def output_scores(summaries_fp: str, model_name: str):
 
     _summaries_fp = Path(summaries_fp).expanduser().resolve()
@@ -44,6 +48,7 @@ def output_scores(summaries_fp: str, model_name: str):
     print(f"Scores written to:\n{scores_path}\n")
 
 
+@deal.pure
 def calc_rouge_score(summaries, references) -> dict[str, float]:
 
     python_rouge = Pythonrouge(
@@ -59,6 +64,7 @@ def calc_rouge_score(summaries, references) -> dict[str, float]:
     return python_rouge.calc_score()
 
 
+@deal.pure
 def french_sentencizer() -> Callable[[str], list[str]]:
     nlp = French()
     nlp.add_pipe("sentencizer")
@@ -70,6 +76,7 @@ def french_sentencizer() -> Callable[[str], list[str]]:
 
 PythonRougeSummaries: TypeAlias = list[list[str]]
 PythonRougeReferences: TypeAlias = list[list[list[str]]]
+@deal.pure
 def rouge_preproc(
     summarization_units: jsonl.Reader
 ) -> tuple[PythonRougeSummaries, PythonRougeReferences]:
