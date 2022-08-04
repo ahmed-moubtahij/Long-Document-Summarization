@@ -20,9 +20,6 @@ from book_loader import BookLoader
 
 spacy.prefer_gpu() # type: ignore
 
-nlp = French()
-nlp.add_pipe("sentencizer")
-
 @deal.raises(NotImplementedError, ValueError)
 @deal.has('io')
 def main():
@@ -87,6 +84,10 @@ def trim(text: str) -> str:
 
 @deal.pure
 def french_sentencizer(text: str) -> list[str]:
+    # TODO: Verify whether `nlp` is cached, otherwise find a way to @cache it yourself
+    nlp = French()
+    nlp.add_pipe("sentencizer")
+
     return list(map(str, nlp(text).sents))
 
 model_init_contract = deal.chain(

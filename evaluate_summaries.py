@@ -5,14 +5,14 @@ In case of PythonRouge errors:
 * subprocess.CalledProcessError:
     -sudo apt-get install libxml-parser-perl
 """
-from collections.abc import Callable
 from pathlib import Path
 import json
 from typing import TypeAlias
 import jsonlines as jsonl
 import deal
-from spacy.lang.fr import French
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
+
+from summarizer import french_sentencizer
 
 # TODO: typehint and contract this
 
@@ -64,16 +64,6 @@ def calc_rouge_score(summaries, references) -> dict[str, float]:
     return python_rouge.calc_score()
 
 
-@deal.pure
-def french_sentencizer() -> Callable[[str], list[str]]:
-    nlp = French()
-    nlp.add_pipe("sentencizer")
-
-    def _sentencizer(text: str):
-        return list(map(str, nlp(text).sents))
-
-    return _sentencizer
-
 PythonRougeSummaries: TypeAlias = list[list[str]]
 PythonRougeReferences: TypeAlias = list[list[list[str]]]
 @deal.pure
@@ -88,14 +78,13 @@ def rouge_preproc(
     # Each reference must be a list of sentences
     all_references = []
 
-    sentencizer = french_sentencizer()
     # TODO: Make sure the contents are correct and correctly aligned
     #       and remove '\n's
     for summ_unit in summarization_units:
-        summary_sents = sentencizer(summ_unit["SUMMARY"])
+        summary_sents = french_sentencizer(summ_unit["SUMMARY"])
         all_summaries.append(summary_sents)
 
-        reference_sents = sentencizer(summ_unit["REFERENCE"])
+        reference_sents = french_sentencizer(summ_unit["REFERENCE"])
         all_references.append([reference_sents])
 
     return all_summaries, all_references
