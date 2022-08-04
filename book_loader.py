@@ -45,6 +45,8 @@ class BookLoader:
 
     chapters:       list[list[str]]
 
+    @deal.has('global')
+    @deal.safe
     def __init__(self, doc_path: str, markers: Markers):
 
         _compiled_markers = fy.walk_values(
@@ -60,6 +62,8 @@ class BookLoader:
                             .values()
                         ).value
 
+    @deal.has('global')
+    @deal.safe
     def _chapter_indexer(self) -> Callable[[str], int]:
 
         current_chapter = 0
@@ -71,6 +75,8 @@ class BookLoader:
 
         return indexer
 
+    @deal.has('global')
+    @deal.safe
     def _is_valid_span(self) -> Callable[[str], bool]:
 
         valid = True
@@ -84,6 +90,7 @@ class BookLoader:
 
         return validator
 
+    @deal.raises(ValueError)
     def _etl_paragraphs(self, doc_path: str) -> Iterator[str]:
 
         paragraphs = self.extract_paragraphs(
@@ -98,6 +105,7 @@ class BookLoader:
                     .thru(self.join_bisections())
                ).value
 
+    @deal.pure
     @staticmethod
     def join_bisections() -> Callable[[str], Iterator[str]]:
 
@@ -106,8 +114,9 @@ class BookLoader:
 
         return lambda paragraph: map(join_bisection, paragraph)
 
-    @staticmethod
+    @deal.raises(ValueError)
     @deal.pre(lambda doc_path: doc_path.exists())
+    @staticmethod
     def extract_paragraphs(doc_path: Path) -> Iterator[str]:
 
         _simple_docx = simplify(Document(doc_path),
@@ -125,6 +134,7 @@ class BookLoader:
                                  default=BookLoader.table_to_text()))
                ).value
 
+    @deal.pure
     @staticmethod
     def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
 
@@ -142,6 +152,8 @@ class BookLoader:
         return _table_to_text
 
 
+@deal.has('io', 'read')
+@deal.raises(AssertionError)
 def main() -> None:
 
     with open('parameters.json', 'r', encoding="utf-8") as json_file:
