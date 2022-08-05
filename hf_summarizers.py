@@ -1,10 +1,8 @@
 from __future__ import annotations
 from pathlib import Path
-import json
 from typing import ClassVar, Literal
 
 import deal
-import jsonlines as jsonl
 from more_itertools import chunked_even
 import torch
 from transformers import EncoderDecoderModel
@@ -12,55 +10,49 @@ from transformers import RobertaTokenizerFast
 from transformers import AutoTokenizer
 from transformers import AutoModelForSeq2SeqLM
 from transformers import SummarizationPipeline
-import spacy
-from spacy.lang.fr import French
 
-from french_textrank import FrenchTextRank
-from book_loader import BookLoader
+from book_loader import read_chapters
+from summarizer_ios import read_references
+from summarizer_ios import output_summaries
+from summarizer_ios import print_sample
+from nlp_utils import trim
 
-spacy.prefer_gpu() # type: ignore
-
-@deal.raises(NotImplementedError, ValueError)
+@deal.raises(NotImplementedError, ValueError, TypeError)
 @deal.has('io')
 def main():
 
     print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
 
-    MODEL_NAME = "textrank"
+    MODEL_NAME = "camembert"
 
-    summarizer = make_summarizer(MODEL_NAME, sentence_encoder="french_semantic")
+    summarizer = summarizer_factory(MODEL_NAME)
     references = read_references(Path("data/references"))
 
     chapters_to_summarize = read_chapters(1, 3)
 
     print("GENERATING SUMMARIES PER CHAPTER...")
+    summarizer: FrenchSummarizer # For some reason pylint needs this
     summary_units = [
         {
             "CHAPTER": idx + 1,
-            # pylint: disable=not-callable
-            "SUMMARY": (summarizer(chapter) # pyright: reportGeneralTypeIssues=false
-                        if MODEL_NAME != "textrank"
-                        else summarizer(chapter, # pyright: reportGeneralTypeIssues=false
-                                        n_sentences=len(french_sentencizer(ref)),
-                                        sent_pred=lambda s: len(s.split()) > 4)),
+            "SUMMARY": summarizer(chapter),
             "REFERENCE": ref
         }
         for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
     ]
 
     out_path = output_summaries(
-        summary_units,
-        Path("data/output_summaries/"),
-        MODEL_NAME)
+        summary_units, Path("data/output_summaries/"), MODEL_NAME)
 
     print_sample(out_path)
 
+# TODO: Add a RandomSum then update report with its scores
+# TODO: Add https://huggingface.co/plguillou/t5-base-fr-sum-cnndm
 @deal.raises(NotImplementedError)
 @deal.has('read', 'network', 'stderr')
-def make_summarizer(
-    model_name: Literal["camembert", "mbart", "textrank"],
-    sentence_encoder: FrenchTextRank.SentenceEncoder | None = None
-) -> FrenchSummarizer | FrenchTextRank:
+def summarizer_factory(
+    model_name: Literal["camembert", "mbart"]
+) -> FrenchSummarizer:
 
     match model_name:
         case "camembert":
@@ -69,26 +61,7 @@ def make_summarizer(
         case "mbart":
             return MbartSum()
 
-        case "textrank":
-            return FrenchTextRank(sentence_encoder=sentence_encoder)
-
     raise NotImplementedError(f"model {model_name} is not implemented.")
-
-# TODO: Add a RandomSum then update report with its scores
-# TODO: Add https://huggingface.co/plguillou/t5-base-fr-sum-cnndm
-
-@deal.pure
-def trim(text: str) -> str:
-    """Removes last sentence. Useful when the decoder generates it incompletely"""
-    return '\n'.join(french_sentencizer(text)[:-1])
-
-@deal.pure
-def french_sentencizer(text: str) -> list[str]:
-    # TODO: Verify whether `nlp` is cached, otherwise find a way to @cache it yourself
-    nlp = French()
-    nlp.add_pipe("sentencizer")
-
-    return list(map(str, nlp(text).sents))
 
 model_init_contract = deal.chain(
     deal.has('read', 'network'),
@@ -97,6 +70,9 @@ model_init_contract = deal.chain(
 
 class FrenchSummarizer():
     device: ClassVar = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    def __call__(self, text: str, trim_last_sent=True):
+        pass
 
 class MbartSum(FrenchSummarizer):
 
@@ -166,62 +142,6 @@ class CamembertSum(FrenchSummarizer):
             return trim(summary)
 
         return summary
-
-
-@deal.pure
-@deal.pre(lambda refs_path: refs_path.exists())
-def read_references(refs_path: Path) -> list[str]:
-    return [
-        ref_file.read_text(encoding="utf-8")
-        for ref_file in sorted(refs_path.iterdir())
-    ]
-
-@deal.safe
-@deal.has('read')
-def read_chapters(first_chapter=0, last_chapter: int | None=None) -> list[str]:
-
-    with open('parameters.json', 'r', encoding="utf-8") as json_file:
-        params = json.load(json_file)
-
-    book = BookLoader(**params)
-
-    chapters = book.chapters[first_chapter:
-                             None if last_chapter is None
-                             else last_chapter + 1]
-
-    return ['\n'.join(paragraph for paragraph in chapter[1: ])
-            for chapter in chapters]
-
-@deal.safe
-@deal.has('stdout', 'write')
-@deal.pre(lambda _: _.out_path.exists())
-def output_summaries(summary_units: list[dict[str, int | str]],
-                     out_path: Path,
-                     model_name: str) -> Path:
-
-    out_path /= f"{model_name}_summaries.jsonl"
-    with open(out_path, 'w', encoding='utf-8') as out_jsonl:
-        jsonl.Writer(out_jsonl).write_all(summary_units)
-    print(f"Output summaries to {out_path}\n")
-
-    return out_path
-
-@deal.raises(ValueError)
-@deal.has('read', 'stdout')
-@deal.pre(lambda _: _.out_path.exists())
-def print_sample(out_path: Path, just_one=True) -> None:
-
-    with jsonl.open(out_path, mode='r') as summarization_units:
-        for summary_unit in summarization_units:
-            chapter, summary = (summary_unit["CHAPTER"],
-                                summary_unit["SUMMARY"])
-            print(f"CHAPTER: {chapter}\n")
-            double_spacing_summary = summary.replace('\n', "\n\n")
-            print(f"SUMMARY:\n{double_spacing_summary}\n")
-            print('-' * 100)
-            if just_one:
-                break
-
 
 if __name__ == "__main__":
     main()

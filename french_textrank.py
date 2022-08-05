@@ -1,6 +1,7 @@
 from collections.abc import Iterator, Callable
 from typing import ClassVar, Literal, TypeAlias
 import heapq
+from pathlib import Path
 from operator import itemgetter
 import numpy as np
 import numpy.typing as npt
@@ -9,8 +10,36 @@ from sentence_transformers import SentenceTransformer
 from spacy.lang.fr import French
 import deal
 
+from book_loader import read_chapters
+from summarizer_ios import read_references
+from summarizer_ios import output_summaries
+from summarizer_ios import print_sample
+from nlp_utils import french_sentencizer
+
 # TODO: Typehint & contract this
-# @deal.inv(lambda french_TR: 0.0 <= french_TR.damping_factor <= 1.0)
+
+def main():
+    summarizer = FrenchTextRank()
+
+    chapters_to_summarize = read_chapters(1, 3)
+    references = read_references(Path("data/references"))
+
+    print("GENERATING SUMMARIES PER CHAPTER...")
+    summary_units = [
+        {
+            "CHAPTER": idx + 1,
+            "SUMMARY": summarizer(chapter,
+                                  len(french_sentencizer(ref)),
+                                  lambda s: len(s.split()) > 4),
+            "REFERENCE": ref
+        }
+        for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
+    ]
+
+    out_path = output_summaries(summary_units, Path("data/output_summaries/"), "textrank")
+
+    print_sample(out_path)
+@deal.inv(lambda french_TR: 0.0 <= french_TR.damping_factor <= 1.0)
 class FrenchTextRank():
 
     IndexedText:        TypeAlias = tuple[int, str]
@@ -29,12 +58,12 @@ class FrenchTextRank():
     @deal.raises(NotImplementedError)
     def __init__(self,
                  damping_factor=0.8, # TODO: Is the damping factor correctly used?
-                 sentence_encoder: SentenceEncoder | None = "camembert"):
+                 sentence_encoder: SentenceEncoder = "camembert"):
 
         self.damping_factor = damping_factor
 
         match sentence_encoder:
-            case "camembert" | None:
+            case "camembert":
                 self.sentence_encoder = SentenceTransformer(
                     "dangvantuan/sentence-camembert-large")
             case "french_semantic":
@@ -59,7 +88,6 @@ class FrenchTextRank():
                  n_sentences: int,
                  sent_pred: Callable[[str], object] = lambda _: True
                 ) -> str:
-
         # TODO: `sentences` can be ran through a `thru` IterChain
         sentences = self.get_sentences(doc, sent_pred)
         embedded_sentences = self.get_sentence_encoding(sentences)
@@ -157,3 +185,6 @@ class FrenchTextRank():
                         and sent_pred(s)]
 
         return sentences
+
+if __name__ == "__main__":
+    main()

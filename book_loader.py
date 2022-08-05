@@ -1,3 +1,4 @@
+from __future__ import annotations
 import warnings
 from pathlib import Path
 import re
@@ -15,6 +16,27 @@ import deal
 import my_utils as ut
 
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
+
+# TODO: This function should be @cache'd
+# TODO: Write a read_chapters_contract with @deal.chain
+@deal.safe
+@deal.has('read')
+@deal.pre(lambda _: _.first >= 0)
+@deal.pre(lambda _: _.last >= _.first)
+@deal.ensure(lambda _: len(_.result) == _.last - _.first + 1)
+def read_chapters(first=0, last: int | None=None) -> list[str]:
+
+    with open('parameters.json', 'r', encoding="utf-8") as json_file:
+        params = json.load(json_file)
+
+    book = BookLoader(**params)
+
+    chapters = book.chapters[first:
+                             None if last is None
+                             else last + 1]
+    # Slicing chapter[1: ] because chapter[0] is pre-chapter 1
+    return ['\n'.join(paragraph for paragraph in chapter[1: ])
+            for chapter in chapters]
 
 @deal.pure
 def join_bisections() -> Callable[[str], Iterator[str]]:

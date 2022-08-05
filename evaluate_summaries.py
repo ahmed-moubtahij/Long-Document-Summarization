@@ -12,7 +12,7 @@ import jsonlines as jsonl
 import deal
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore
 
-from summarizer import french_sentencizer
+from nlp_utils import french_sentencizer
 
 # TODO: typehint and contract this
 
