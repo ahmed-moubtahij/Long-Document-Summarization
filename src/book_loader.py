@@ -18,6 +18,15 @@ from nlp_utils import join_bisections
 
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 
+def main() -> None:
+
+    book = BookLoader.from_params_json()
+
+    observed_lengths = [len(c) for c in book.chapters]
+    expected_lengths = [43, 101, 152, 136, 271, 307, 23]
+
+    assert observed_lengths == expected_lengths
+
 # TODO: Can the closure on `values_of` be @cache'd ?
 @deal.pure
 def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
@@ -46,7 +55,7 @@ read_paragraphs_contract = deal.chain(
 @read_paragraphs_contract
 def read_paragraphs(doc_path: Path) -> Iterator[str]:
 
-    _simple_docx = simplify(Document(doc_path),
+    _simple_docx = simplify(Document(doc_path.resolve()),
                             {"include-paragraph-indent": False,
                             "include-paragraph-numbering": False})
     simple_docx = ut.one_expected(_simple_docx["VALUE"])["VALUE"]
@@ -183,18 +192,6 @@ class BookLoader:
                     .remove(self.undesirables)
                     .thru(join_bisections())
                ).value
-
-
-@deal.has('read')
-@deal.raises(AssertionError)
-def main() -> None:
-
-    book = BookLoader.from_params_json()
-
-    observed_lengths = [len(c) for c in book.chapters]
-    expected_lengths = [43, 101, 152, 136, 271, 307, 23]
-
-    assert observed_lengths == expected_lengths
 
 if __name__ == '__main__':
     main()

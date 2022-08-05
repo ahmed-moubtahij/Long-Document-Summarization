@@ -23,7 +23,7 @@ def main():
     book = BookLoader.from_params_json()
 
     chapters_to_summarize = book.get_chapters(1, 3)
-    references = read_references(Path("data/references"))
+    references = read_references(Path("data/references/").resolve())
 
     print("GENERATING SUMMARIES PER CHAPTER...")
     summarizer = FrenchTextRank()
@@ -38,7 +38,9 @@ def main():
         for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
     ]
 
-    out_path = output_summaries(summary_units, Path("data/output_summaries/"), "textrank")
+    out_path = output_summaries(summary_units,
+                                out_path=Path("data/output_summaries/").resolve(),
+                                model_name="textrank")
 
     print_sample(out_path, just_one=False)
 
