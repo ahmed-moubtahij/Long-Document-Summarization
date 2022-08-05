@@ -3,6 +3,7 @@ import warnings
 from pathlib import Path
 import re
 import json
+from functools import partial
 from collections.abc import Iterator, Callable
 from typing import ClassVar, TypeAlias, TypedDict
 from typing_extensions import Required
@@ -27,22 +28,18 @@ def main() -> None:
 
     assert observed_lengths == expected_lengths
 
-# TODO: Can the closure on `values_of` be @cache'd ?
 @deal.pure
-def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
+@deal.pre(lambda table: all(e["TYPE"] == "table-row" for e in table))
+def table_to_text(table: list[dict[str, list[dict]]]) -> str:
 
-    values_of = fy.partial(fy.pluck, "VALUE")
+    values_of = partial(fy.pluck, "VALUE")
 
-    @deal.pre(lambda table: all(e["TYPE"] == "table-row" for e in table))
-    def _table_to_text(table):
-        return ' '.join(
-            text
-            for row in values_of(table)
-            for cell in values_of(row)
-            for content in values_of(cell)
-            for text in values_of(content))
-
-    return _table_to_text
+    return ' '.join(
+        text
+        for row in values_of(table)
+        for cell in values_of(row)
+        for content in values_of(cell)
+        for text in values_of(content))
 
 
 read_paragraphs_contract = deal.chain(
@@ -67,7 +64,7 @@ def read_paragraphs(doc_path: Path) -> Iterator[str]:
                 .compact()
                 .map(fy.iffy(pred=lambda p: p[0]["TYPE"] == "text",
                              action=lambda p: ut.one_expected(p)["VALUE"],
-                             default=table_to_text()))
+                             default=table_to_text))
             ).value
 
 Pattern:        TypeAlias = re.Pattern[str]
@@ -86,9 +83,9 @@ class Markers(TypedDict, total=False):
 
 class BookLoader:
 
-    re_compile_unicode: ClassVar[Callable] = fy.partial(re.compile, flags=re.UNICODE)
-    _match_anything:    ClassVar[Pattern] = re.compile(".*", flags=re.DOTALL)
-    _match_nothing:     ClassVar[Pattern] = re.compile("a^")
+    re_compile_unicode: ClassVar[Callable]  = partial(re.compile, flags=re.UNICODE)
+    _match_anything:    ClassVar[Pattern]   = re.compile(".*", flags=re.DOTALL)
+    _match_nothing:     ClassVar[Pattern]   = re.compile("a^")
 
     chapter:        Pattern
     slice:          PatternsPair = [_match_anything, _match_anything]
@@ -190,7 +187,7 @@ class BookLoader:
                     .filter(self._is_valid_span())
                     .remove(self.references)
                     .remove(self.undesirables)
-                    .thru(join_bisections())
+                    .thru(join_bisections)
                ).value
 
 if __name__ == '__main__':

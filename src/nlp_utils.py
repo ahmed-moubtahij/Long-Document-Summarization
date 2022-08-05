@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterator
-from functools import partial
+from functools import cache, partial
 import re
 
 from spacy.lang.fr import French
@@ -10,21 +10,19 @@ def trim(text: str) -> str:
     """Removes last sentence. Useful when the decoder generates it incompletely"""
     return '\n'.join(french_sentencizer(text)[:-1])
 
-@deal.pure
-def french_sentencizer(text: str) -> list[str]:
-    # TODO: Verify whether `nlp` is cached, otherwise find a way to @cache it yourself
+@cache
+def load_sentencizer() -> Callable:
     nlp = French()
     nlp.add_pipe("sentencizer")
+    return nlp
 
-    return list(map(str, nlp(text).sents))
+@deal.pure
+def french_sentencizer(text: str) -> list[str]:
+    return list(map(str, load_sentencizer()(text).sents))
 
-
-# TODO: Can the closure on `bisection` and `join_bisection` be @cache'd ?
 deal.raises(ValueError, TypeError)
 @deal.has()
-def join_bisections() -> Callable[[str], Iterator[str]]:
-
+def join_bisections(text: str) -> Iterator[str]:
+    # re.compile caches https://stackoverflow.com/a/12514276
     bisection = re.compile(r"(\w+)-\s(\w+)", flags=re.UNICODE)
-    join_bisection = partial(bisection.sub, r"\1\2")
-
-    return lambda text: map(join_bisection, text)
+    return map(partial(bisection.sub, r"\1\2"), text)
