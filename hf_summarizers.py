@@ -1,6 +1,6 @@
 from __future__ import annotations
-from pathlib import Path
 from typing import ClassVar, Literal
+from pathlib import Path
 
 import deal
 from more_itertools import chunked_even
@@ -11,7 +11,7 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForSeq2SeqLM
 from transformers import SummarizationPipeline
 
-from book_loader import read_chapters
+from book_loader import BookLoader
 from summarizer_ios import read_references
 from summarizer_ios import output_summaries
 from summarizer_ios import print_sample
@@ -25,13 +25,14 @@ def main():
 
     MODEL_NAME = "camembert"
 
-    summarizer = summarizer_factory(MODEL_NAME)
-    references = read_references(Path("data/references"))
+    book = BookLoader.from_params_json()
 
-    chapters_to_summarize = read_chapters(1, 3)
+    chapters_to_summarize = book.get_chapters(1, 3)
 
     print("GENERATING SUMMARIES PER CHAPTER...")
+    summarizer = summarizer_factory(MODEL_NAME)
     summarizer: FrenchSummarizer # For some reason pylint needs this
+    references = read_references(Path("data/references"))
     summary_units = [
         {
             "CHAPTER": idx + 1,

@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer
 from spacy.lang.fr import French
 import deal
 
-from book_loader import read_chapters
+from book_loader import BookLoader
 from summarizer_ios import read_references
 from summarizer_ios import output_summaries
 from summarizer_ios import print_sample
@@ -19,12 +19,14 @@ from nlp_utils import french_sentencizer
 # TODO: Typehint & contract this
 
 def main():
-    summarizer = FrenchTextRank()
 
-    chapters_to_summarize = read_chapters(1, 3)
+    book = BookLoader.from_params_json()
+
+    chapters_to_summarize = book.get_chapters(1, 3)
     references = read_references(Path("data/references"))
 
     print("GENERATING SUMMARIES PER CHAPTER...")
+    summarizer = FrenchTextRank()
     summary_units = [
         {
             "CHAPTER": idx + 1,
@@ -38,7 +40,8 @@ def main():
 
     out_path = output_summaries(summary_units, Path("data/output_summaries/"), "textrank")
 
-    print_sample(out_path)
+    print_sample(out_path, just_one=False)
+
 @deal.inv(lambda french_TR: 0.0 <= french_TR.damping_factor <= 1.0)
 class FrenchTextRank():
 
@@ -102,25 +105,32 @@ class FrenchTextRank():
     def sentencizer(text: str) -> list[str]:
         return list(map(str, FrenchTextRank.nlp(text).sents))
 
-    @deal.has()
+    @staticmethod
     @deal.raises(TypeError, ValueError)
-    def sim(self, u, v):
+    def sim(u, v):
         return abs(1 - distance.cdist(u, v, 'cosine'))
 
-    @deal.pure
-    def cosine(self, u, v):
-        return abs(1 - distance.cosine(u, v))
+    # Not used since using distance.cdist(u, v, 'cosine')
+    # @staticmethod
+    # @deal.pure
+    # def cosine(u, v):
+    #     return abs(1 - distance.cosine(u, v))
 
-    @deal.pure
-    def rescale(self, a):
 
-        maximum = np.max(a)
-        minimum = np.min(a)
+    # Call to this was commented out in original code
+    # Decide necessity on revision
+    # @staticmethod
+    # @deal.pure
+    # def rescale(a):
 
-        return (a - minimum) / (maximum - minimum)
+    #     maximum = np.max(a)
+    #     minimum = np.min(a)
 
+    #     return (a - minimum) / (maximum - minimum)
+
+    @staticmethod
     @deal.has()
-    def normalize(self, matrix):
+    def normalize(matrix):
 
         for row in matrix:
             row_sum = np.sum(row)
@@ -129,18 +139,18 @@ class FrenchTextRank():
 
         return matrix
 
-    @deal.raises(ValueError)
+    @deal.raises(ValueError, TypeError, ValueError)
     @deal.pre(lambda _: 0.0 <= _.similarity_threshold <= 1.0)
     def textrank(self, texts_embeddings, similarity_threshold=0.8):
 
-        matrix = self.sim(texts_embeddings, texts_embeddings)
+        matrix = FrenchTextRank.sim(texts_embeddings, texts_embeddings)
         np.fill_diagonal(matrix, 0)
         matrix[matrix < similarity_threshold] = 0
 
-        matrix = self.normalize(matrix)
+        matrix = FrenchTextRank.normalize(matrix)
 
         scaled_matrix = self.damping_factor * matrix
-        scaled_matrix = self.normalize(scaled_matrix)
+        scaled_matrix = FrenchTextRank.normalize(scaled_matrix)
         # scaled_matrix = rescale(scaled_matrix)
 
         ranks = np.ones((len(matrix), 1)) / len(matrix)

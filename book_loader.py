@@ -13,39 +13,12 @@ from docx import Document
 from simplify_docx import simplify
 import deal
 
-import my_utils as ut
+import gen_utils as ut
+from nlp_utils import join_bisections
 
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 
-# TODO: This function should be @cache'd
-# TODO: Write a read_chapters_contract with @deal.chain
-@deal.safe
-@deal.has('read')
-@deal.pre(lambda _: _.first >= 0)
-@deal.pre(lambda _: _.last >= _.first)
-@deal.ensure(lambda _: len(_.result) == _.last - _.first + 1)
-def read_chapters(first=0, last: int | None=None) -> list[str]:
-
-    with open('parameters.json', 'r', encoding="utf-8") as json_file:
-        params = json.load(json_file)
-
-    book = BookLoader(**params)
-
-    chapters = book.chapters[first:
-                             None if last is None
-                             else last + 1]
-    # Slicing chapter[1: ] because chapter[0] is pre-chapter 1
-    return ['\n'.join(paragraph for paragraph in chapter[1: ])
-            for chapter in chapters]
-
-@deal.pure
-def join_bisections() -> Callable[[str], Iterator[str]]:
-
-    bisection = BookLoader.re_compile_unicode(r"(\w+)-\s(\w+)")
-    join_bisection = fy.partial(bisection.sub, r"\1\2")
-
-    return lambda text: map(join_bisection, text)
-
+# TODO: Can the closure on `values_of` be @cache'd ?
 @deal.pure
 def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
 
@@ -62,9 +35,15 @@ def table_to_text() -> Callable[[list[dict[str, list[dict]]]], str]:
 
     return _table_to_text
 
-@deal.has('read')
-@deal.raises(ValueError)
-@deal.pre(lambda doc_path: doc_path.exists())
+
+read_paragraphs_contract = deal.chain(
+    deal.has('read'),
+    deal.raises(ValueError),
+    deal.pre(lambda doc_path: doc_path.exists()),
+    deal.pre(lambda doc_path: doc_path.is_file()),
+    deal.pre(lambda doc_path: str(doc_path).endswith('.docx'))
+)
+@read_paragraphs_contract
 def read_paragraphs(doc_path: Path) -> Iterator[str]:
 
     _simple_docx = simplify(Document(doc_path),
@@ -111,21 +90,60 @@ class BookLoader:
 
     chapters:       list[list[str]]
 
-    @deal.safe
-    def __init__(self, doc_path: str, markers: Markers):
+    params_json_contract: ClassVar = deal.chain(
+        deal.pre(lambda _: _.params_json.exists()),
+        deal.pre(lambda _: _.params_json.is_file()),
+        deal.pre(lambda _: str(_.params_json).endswith('.json')),
+        deal.raises(json.JSONDecodeError, TypeError),
+        deal.has('read'))
 
-        _compiled_markers = fy.walk_values(
-            fy.iffy(pred=fy.is_list,
-                    action=ut.lmap_(self.re_compile_unicode),
-                    default=self.re_compile_unicode),
-            markers)
-        self.__dict__.update(_compiled_markers)
+    get_chapters_contract = deal.chain(
+        deal.pure,
+        deal.pre(lambda _: _.first >= 0),
+        deal.pre(lambda _: _.last >= _.first),
+        deal.ensure(lambda _: len(_.result) == _.last - _.first + 1))
+
+    @deal.raises(ValueError, TypeError) # class vars' re.compile
+    def __init__(self, doc_path: str, markers: Markers, _all_markers_compiled=False):
+
+        if not _all_markers_compiled:
+            _compiled_markers = fy.walk_values(
+                                    fy.iffy(pred=fy.is_list,
+                                            action=ut.lmap_(BookLoader.re_compile_unicode),
+                                            default=BookLoader.re_compile_unicode),
+                                        markers)
+            self.__dict__.update(_compiled_markers)
+        else:
+            self.__dict__.update(markers)
 
         _paragraphs = self._etl_paragraphs(doc_path)
         self.chapters = (Chain(_paragraphs)
                             .group_by(self._chapter_indexer())
                             .values()
                         ).value
+
+    @classmethod
+    @params_json_contract
+    def from_params_json(cls, params_json=Path("parameters.json")):
+
+        with params_json.open(mode='r', encoding="utf-8") as json_file:
+            params = json.load(json_file)
+
+        _compiled_markers = fy.walk_values(
+            fy.iffy(pred=fy.is_list,
+                    action=ut.lmap_(BookLoader.re_compile_unicode),
+                    default=BookLoader.re_compile_unicode),
+                params["markers"])
+
+        return cls(params["doc_path"], _compiled_markers, _all_markers_compiled=True)
+
+    @get_chapters_contract
+    def get_chapters(self, first=0, last: int | None=None) -> list[str]:
+        """ Reads chapters `first` to `last` inclusively with skipped headers """
+        _chapters = self.chapters[first: None if last is None
+                                              else last + 1]
+
+        return ['\n'.join(chapter[1: ]) for chapter in _chapters]
 
     @deal.safe
     def _chapter_indexer(self) -> Callable[[str], int]:
@@ -171,15 +189,12 @@ class BookLoader:
 @deal.raises(AssertionError)
 def main() -> None:
 
-    with open('parameters.json', 'r', encoding="utf-8") as json_file:
-        params = json.load(json_file)
-
-    book = BookLoader(**params)
+    book = BookLoader.from_params_json()
 
     observed_lengths = [len(c) for c in book.chapters]
     expected_lengths = [43, 101, 152, 136, 271, 307, 23]
 
     assert observed_lengths == expected_lengths
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

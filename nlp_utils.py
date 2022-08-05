@@ -1,3 +1,7 @@
+from collections.abc import Callable, Iterator
+from functools import partial
+import re
+
 from spacy.lang.fr import French
 import deal
 
@@ -13,3 +17,14 @@ def french_sentencizer(text: str) -> list[str]:
     nlp.add_pipe("sentencizer")
 
     return list(map(str, nlp(text).sents))
+
+
+# TODO: Can the closure on `bisection` and `join_bisection` be @cache'd ?
+deal.raises(ValueError, TypeError)
+@deal.has()
+def join_bisections() -> Callable[[str], Iterator[str]]:
+
+    bisection = re.compile(r"(\w+)-\s(\w+)", flags=re.UNICODE)
+    join_bisection = partial(bisection.sub, r"\1\2")
+
+    return lambda text: map(join_bisection, text)
