@@ -3,6 +3,7 @@ from typing import ClassVar, Literal, TypeAlias
 import heapq
 from pathlib import Path
 from operator import itemgetter
+
 import numpy as np
 import numpy.typing as npt
 from scipy.spatial import distance

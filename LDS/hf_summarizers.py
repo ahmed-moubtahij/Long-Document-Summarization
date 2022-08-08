@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import ClassVar, Literal
-from pathlib import Path
 
 import deal
 from more_itertools import chunked_even
@@ -11,41 +10,37 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForSeq2SeqLM
 from transformers import SummarizationPipeline
 
-from book_loader import BookLoader
-from summarizer_ios import read_references
-from summarizer_ios import output_summaries
-from summarizer_ios import print_sample
 from nlp_utils import trim
 
-@deal.raises(NotImplementedError, ValueError, TypeError)
-@deal.has('io')
-def main():
+# @deal.raises(NotImplementedError, ValueError, TypeError)
+# @deal.has('io')
+# def main():
 
-    print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
+#     print(f"\nIS CUDA AVAILABLE: {torch.cuda.is_available()}\n")
 
-    MODEL_NAME = "camembert"
+#     MODEL_NAME = "camembert"
 
-    book = BookLoader.from_params_json()
+#     book = BookLoader.from_params_json()
 
-    chapters_to_summarize = book.get_chapters(1, 3)
+#     chapters_to_summarize = book.get_chapters(1, 3)
 
-    print("GENERATING SUMMARIES PER CHAPTER...")
-    summarizer = summarizer_factory(MODEL_NAME)
-    summarizer: FrenchSummarizer # For some reason pylint needs this
-    references = read_references(Path("data/references"))
-    summary_units = [
-        {
-            "CHAPTER": idx + 1,
-            "SUMMARY": summarizer(chapter),
-            "REFERENCE": ref
-        }
-        for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
-    ]
+#     print("GENERATING SUMMARIES PER CHAPTER...")
+#     summarizer = summarizer_factory(MODEL_NAME)
+#     summarizer: FrenchSummarizer # For some reason pylint needs this
+#     references = read_references(Path("data/references"))
+#     summary_units = [
+#         {
+#             "CHAPTER": idx + 1,
+#             "SUMMARY": summarizer(chapter),
+#             "REFERENCE": ref
+#         }
+#         for idx, (chapter, ref) in enumerate(zip(chapters_to_summarize, references))
+#     ]
 
-    out_path = output_summaries(
-        summary_units, Path("data/output_summaries/"), MODEL_NAME)
+#     out_path = output_summaries(
+#         summary_units, Path("data/output_summaries/"), MODEL_NAME)
 
-    print_sample(out_path)
+#     print_sample(out_path)
 
 # TODO: Add a RandomSum then update report with its scores
 # TODO: Add https://huggingface.co/plguillou/t5-base-fr-sum-cnndm
@@ -66,11 +61,14 @@ def summarizer_factory(
 
 model_init_contract = deal.chain(
     deal.has('read', 'network'),
-    deal.safe
-)
+    deal.safe)
 
 class FrenchSummarizer():
-    device: ClassVar = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device: ClassVar = 'cuda'
+
+    @deal.pre(torch.cuda.is_available)
+    def __init__(self) -> None:
+        ...
 
     def __call__(self, text: str, trim_last_sent=True):
         pass
@@ -79,7 +77,7 @@ class MbartSum(FrenchSummarizer):
 
     @model_init_contract
     def __init__(self) -> None:
-
+        super().__init__()
         ckpt = 'lincoln/mbart-mlsum-automatic-summarization'
         self.tokenizer = AutoTokenizer.from_pretrained(ckpt)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(ckpt)
@@ -110,7 +108,7 @@ class CamembertSum(FrenchSummarizer):
 
     @model_init_contract
     def __init__(self) -> None:
-
+        super().__init__()
         ckpt = "mrm8488/camembert2camembert_shared-finetuned-french-summarization"
         self.tokenizer = RobertaTokenizerFast.from_pretrained(ckpt)
         self.model = EncoderDecoderModel.from_pretrained(ckpt)
@@ -144,5 +142,5 @@ class CamembertSum(FrenchSummarizer):
 
         return summary
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

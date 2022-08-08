@@ -14,8 +14,8 @@ from docx import Document
 from simplify_docx import simplify
 import deal
 
-import gen_utils as ut
-from nlp_utils import join_bisections
+import LDS.gen_utils as ut
+from LDS.nlp_utils import join_bisections
 
 warnings.filterwarnings("ignore", message="Skipping unexpected tag")
 

@@ -8,6 +8,7 @@ In case of PythonRouge errors:
 from pathlib import Path
 import json
 from typing import TypeAlias
+
 import jsonlines as jsonl
 import deal
 from pythonrouge.pythonrouge import Pythonrouge # type: ignore

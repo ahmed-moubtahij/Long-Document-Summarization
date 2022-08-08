@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import jsonlines as jsonl
 import deal
 

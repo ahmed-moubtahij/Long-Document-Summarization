@@ -1,19 +1,32 @@
-[project]
-name = "French_LDS"
+[tool.poetry]
+name = "lds"
 version = "0.1.0"
-description = "Long Document Summarization of chaptered french books."
-authors = [
-    {name = "Ahmed Moubtahij", email="ahmed.moubtahij.1@ens.etsmtl.ca"},
-]
-requires-python = ">=3.10.5"
-keywords = ["NLP", "Long Document Summarization", "French"]
 
-[project.urls]
-homepage = "https://github.com/LiNCS-lab/LDS"
+[tool.poetry.dependencies]
+python = "^3.10.5"
+torch = {url = "https://download.pytorch.org/whl/cu116/torch-1.12.1%2Bcu116-cp310-cp310-linux_x86_64.whl"}
+transformers = "^4.21.1"
+deal = "^4.23.3"
+funcy = "^1.17"
+funcy-chain = "^0.2.0"
+docx = "^0.2.4"
+simplify-docx = "^0.1.2"
+more-itertools = "7.0.0"
+numpy = "^1.23.1"
+spacy = "^3.4.1"
+jsonlines = "^3.1.0"
+pythonrouge = {git = "https://github.com/tagucci/pythonrouge.git", rev = "0f1603dbc089ecb0fb40fdd3a28576e9f3d36769"}
 
+[tool.poetry.dev-dependencies]
+deal = "^4.23.3"
+jupyter = "^1.0.0"
+mypy = "^0.971"
+pylint = "^2.14.5"
+pyright = "^1.1.266"
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.pyright]
 stubPath = ""
@@ -38,10 +51,9 @@ module = [
 ignore_missing_imports = true
 
 [tool.pylint]
-ignore = "env_LDS"
+ignore = ["env_LDS", "setup"]
 disable = ["missing-module-docstring",
            "missing-class-docstring",
            "missing-function-docstring",
            "invalid-name",
            "too-few-public-methods"]
-
