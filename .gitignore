@@ -6,3 +6,5 @@ __pycache__/
 .hypothesis/
 Untitled.ipynb
 summaries_reader.py
+parameters.json
+data_analysis.ipynb
