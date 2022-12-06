@@ -1,0 +1,1 @@
+{"rouge1": {"precision": 59.32, "recall": 21.66, "fmeasure": 30.27}, "rouge2": {"precision": 16.21, "recall": 5.37, "fmeasure": 7.74}, "rougeL": {"precision": 27.45, "recall": 9.57, "fmeasure": 13.55}, "rougeLsum": {"precision": 55.61, "recall": 20.26, "fmeasure": 28.34}}

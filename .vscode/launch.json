@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {   // Selected with ctrl+F5 or F5. -O disables assertions and `deal` contracts.
+            "name": "Python: Module",
+            "type": "python",
+            "request": "launch",
+            "module": "main",
+            "justMyCode": false,
+            "pythonArgs": ["-O"],
+        },
+        {   // Selected with the Run Python File button on the top-right of the editor
+            "name": "Python: Module",
+            "type": "python",
+            "request": "launch",
+            "module": "main",
+            "justMyCode": false,
+            "purpose": ["debug-in-terminal"],
+        },
+    ]
+}

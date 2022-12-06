@@ -3,9 +3,10 @@
     "markers": {
         "slice": ["^Introduction$", "Annexe /$"],
         "chapter": "^Chapitre \\d+ /$|^Conclusion$",
-        "header": "^Chapitre \\d+ /.+|^Introduction$|^Stress, santé et performance au travail$|^Conclusion$",
-        "references": ".+[A-Z]\\.\\s.*\\((?:\\d{4})|(?:s\\.\\sa\\.)\\)",
-        "undesirables": "(?:^Matière à réFlexion$)|(?:^/\tPost-scriptum$)|(?:/.+)",
+        "headers": "^Chapitre \\d+ /.+|^Introduction$|^Stress, santé et performance au travail$|^Conclusion$",
+        "footnotes": ".+?[A-Z]\\.\\s.*?\\(\\d{4}\\)",
+        "undesirables": "(?:^CONFUCIUS$)|(?:^Matière à réFlexion$)|(?:^/\tPost-scriptum$)|(?:/.+)|(?:\\((?![0-9_])\\w+\\.com\\))",
+        "citing": "((?:(?![0-9_])\\w){3,}?)\\d+",
         "na_span": ["^exerCiCe \\d\\.\\d /$",
                     "^Chapitre \\d+ /$|^Conclusion$|^Les caractéristiques personnelles\\.|/\\tLocus de contrôle$|^L'observation de sujets a amené Rotter|^Lorsqu'une personne souffre de stress"]
     }

@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .mypy_cache/
 __pycache__/
-env_LDS/
 .hypothesis/
+Untitled.ipynb

@@ -1,28 +1,37 @@
 [tool.poetry]
 name = "lds"
 version = "0.1.0"
+description = "Long Document Summarization of chaptered french books."
+authors = ["Ahmed Moubtahij <ahmed.moubtahij.1@ens.etsmtl.ca>"]
 
 [tool.poetry.dependencies]
-python = "^3.10.5"
+python = ">=3.10.5,<3.12"
 torch = {url = "https://download.pytorch.org/whl/cu116/torch-1.12.1%2Bcu116-cp310-cp310-linux_x86_64.whl"}
-transformers = "^4.21.1"
+transformers = "4.21.2"
 deal = "^4.23.3"
 funcy = "^1.17"
 funcy-chain = "^0.2.0"
 docx = "^0.2.4"
 simplify-docx = "^0.1.2"
-more-itertools = "7.0.0"
 numpy = "^1.23.1"
 spacy = "^3.4.1"
 jsonlines = "^3.1.0"
 pythonrouge = {git = "https://github.com/tagucci/pythonrouge.git", rev = "0f1603dbc089ecb0fb40fdd3a28576e9f3d36769"}
+sentencepiece = "^0.1.97"
+protobuf = "3.20"
+rouge-score = "^0.1.2"
+sacremoses = "^0.0.53"
+scipy = "^1.9.0"
+sentence-transformers = "^2.2.2"
+networkx = "^2.8.8"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 deal = "^4.23.3"
 jupyter = "^1.0.0"
 mypy = "^0.971"
 pylint = "^2.14.5"
 pyright = "^1.1.266"
+pandas = "^1.5.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -34,8 +43,11 @@ reportPrivateImportUsage = false
 
 [tool.mypy]
 python_version = "3.10"
-exclude = "env_LDS/"
-plugins = ["deal.mypy"]
+plugins = [
+    "deal.mypy",
+    "numpy.typing.mypy_plugin",
+]
+# exclude = "env/"
 
 [[tool.mypy.overrides]]
 module = [
@@ -46,14 +58,23 @@ module = [
     "simplify_docx.*",
     "scipy.spatial.*",
     "sentence_transformers.*",
-
+    "tqdm.*",
+    "rouge_score.*",
+    "pythonrouge.*",
+    "nltk.*",
+    "networkx.*",
+    "scipy.*",
 ]
 ignore_missing_imports = true
 
 [tool.pylint]
-ignore = ["env_LDS", "setup"]
-disable = ["missing-module-docstring",
-           "missing-class-docstring",
-           "missing-function-docstring",
-           "invalid-name",
-           "too-few-public-methods"]
+ignore = ["archive"]
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "invalid-name",
+    "too-few-public-methods",
+    "multiple-statements",
+]
+max-args = 10

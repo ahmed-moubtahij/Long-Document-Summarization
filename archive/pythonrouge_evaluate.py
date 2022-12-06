@@ -1,3 +1,6 @@
+# NOTE: pythonrouge is discarded in favor of google-research's rouge implementation.
+# However pythonrouge provides more rouge variants, so it is kept in case it's needed.
+
 """
 In case of PythonRouge errors:
 * UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
@@ -11,20 +14,22 @@ from typing import TypeAlias
 
 import jsonlines as jsonl
 import deal
-from pythonrouge.pythonrouge import Pythonrouge # type: ignore
+from pythonrouge.pythonrouge import Pythonrouge
 
-from nlp_utils import french_sentencizer
+from LDS.nlp_utils import french_sentencizer
 
+# NOTE: Run this -with args- for randomsum
 # TODO: typehint and contract this
 
 @deal.has('io', 'stdout', 'write')
 @deal.raises(AssertionError, ValueError)
 def main():
 
-    # TODO: `EXPERIMENT_ID` should be synchronized with summarizer
+    # NOTE: `EXPERIMENT_ID` should be synchronized with summarizer
     MODEL_NAME = "textrank"
     EXPERIMENT_ID = f"{MODEL_NAME}_flaubert_base_uncased-xnli-sts"
     summaries_fp = f"data/output_summaries/{EXPERIMENT_ID}_summaries.jsonl"
+
     output_scores(summaries_fp, EXPERIMENT_ID)
 
 @deal.has('io', 'stdout', 'write')
@@ -79,8 +84,8 @@ def rouge_preproc(
     # Each reference must be a list of sentences
     all_references = []
 
-    # TODO: Make sure the contents are correct and correctly aligned
-    #       and remove '\n's
+    # TODO: Ensure the contents are correct and correctly aligned
+    #       + remove '\n's
     for summ_unit in summarization_units:
         summary_sents = french_sentencizer(summ_unit["SUMMARY"])
         all_summaries.append(summary_sents)

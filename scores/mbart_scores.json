@@ -1,1 +1,1 @@
-{"ROUGE-1-R": 0.40522, "ROUGE-1-P": 0.64593, "ROUGE-1-F": 0.48079, "ROUGE-2-R": 0.1542, "ROUGE-2-P": 0.26113, "ROUGE-2-F": 0.18706, "ROUGE-L-R": 0.38855, "ROUGE-L-P": 0.62088, "ROUGE-L-F": 0.46152, "ROUGE-SU4-R": 0.20582, "ROUGE-SU4-P": 0.33835, "ROUGE-SU4-F": 0.24676}
+{"rouge1": {"precision": 60.24, "recall": 35.88, "fmeasure": 43.49}, "rouge2": {"precision": 23.82, "recall": 13.71, "fmeasure": 16.77}, "rougeL": {"precision": 25.91, "recall": 14.73, "fmeasure": 18.16}, "rougeLsum": {"precision": 58.31, "recall": 34.65, "fmeasure": 42.04}}
