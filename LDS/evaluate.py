@@ -43,7 +43,7 @@ def evaluate(predictions: list[str],
 
 # Re-exported from:
 # https://github.com/google-research/google-research/blob/master/rouge/scoring.py
-# Because they provide aggregate scoring with CLI file inputs but not through the API
+# Because they provide aggregate scoring with CLI file inputs, not with the API
 class AggregateScore(namedtuple("AggregateScore", ["low", "mid", "high"])):
     """Tuple containing confidence intervals for scores."""
 

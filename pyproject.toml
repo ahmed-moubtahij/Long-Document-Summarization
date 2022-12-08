@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "lds"
 version = "0.1.0"
-description = "Long Document Summarization of chaptered french books."
-authors = ["Ahmed Moubtahij <ahmed.moubtahij.1@ens.etsmtl.ca>"]
+description = "Long Document Summarization with semi-automatic pre-processing."
+authors = ["Ahmed Moubtahij"]
 
 [tool.poetry.dependencies]
 python = ">=3.10.5,<3.12"

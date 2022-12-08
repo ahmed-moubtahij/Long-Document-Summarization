@@ -22,8 +22,8 @@ SUMMARIES_OUT_PATH = Path("data/output_summaries/").resolve()
 SCORES_OUT_PATH = Path("scores/textrank/").resolve()
 
 book = BookLoader(
-    doc_path='data/D5627-Dolan.docx',
-    markers={
+    doc_path = "data/D5627-Dolan.docx",
+    markers = {
         "slice": [r"^Introduction$", r"Annexe /$"],
         "chapter": r"^Chapitre \d+ /$|^Conclusion$",
         "headers": r"^Chapitre \d+ /.+"

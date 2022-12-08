@@ -68,14 +68,14 @@ class TextRank(ExtractiveSummarizer):
         self.post_process  = post_process
 
     @deal.ensure(lambda _: len(_.result) <= len(_.text))
-    def __call__(self, text: str, n: int) -> str:
+    def __call__(self, text: str, n_sentences: int) -> str:
 
-        super().__call__(text, n)
+        super().__call__(text, n_sentences)
         # Duplicate sentences are unlikely, but such an event spuriously boosts centrality.
         sentences = stable_unique_list(s.strip() for s in french_sentencizer(text)
                                        if self.sentence_pred(s))
         ranked_sentences = self.textrank(sentences)
-        top_sentences = list(self.__class__.top_n_in_order(ranked_sentences, n))
+        top_sentences = list(self.__class__.top_n_in_order(ranked_sentences, n_sentences))
         joined_summary = self.pos_based_join(
             zip(top_sentences, map(sentences.index, top_sentences))
         )
