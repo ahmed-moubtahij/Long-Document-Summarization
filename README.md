@@ -262,7 +262,7 @@ Project Link: [https://github.com/Ayenem/LDS](https://github.com/Ayenem/LDS)
 [stars-url]: https://github.com/Ayenem/LDS/stargazers
 [issues-shield]: https://img.shields.io/github/issues/Ayenem/LDS.svg?style=for-the-badge
 [issues-url]: https://github.com/Ayenem/LDS/issues
-[license-shield]: https://img.shields.io/github/license/Ayenem/LDS.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/Ayenem/LDS?style=for-the-badge
 [license-url]: https://github.com/Ayenem/LDS/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://www.linkedin.com/in/ahmed-moubtahij/
