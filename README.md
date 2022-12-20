@@ -125,8 +125,6 @@ from sentence_transformers import SentenceTransformer
 
 summarizer = TextRank(
     sentence_encoder = SentenceTransformer("Sahajtomar/french_semantic"),
-    sentence_pred    = lambda s: len(s.split()) > 4,              # optional
-    post_process     = lambda summary: summary.replace("'", "’"), # optional
 )
 summary = summarizer(text, n_sentences=5)
 print(summary)
@@ -181,8 +179,6 @@ chapters_to_summarize = book.get_chapters(1, 3)
 
 summarizer = TextRank(
     sentence_encoder = SentenceTransformer("Sahajtomar/french_semantic"),
-    sentence_pred    = lambda s: len(s.split()) > 4,              # optional
-    post_process     = lambda summary: summary.replace("'", "’"), # optional
 )
 
 chapter_summaries = [summarizer(chapter, n_sentences=10)
